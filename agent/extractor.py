@@ -613,6 +613,26 @@ class IncrementalExtractor:
                 inferred_cat = BRAND_EXCLUSIVE_CATEGORY[b_low]
                 slots_found['category'] = (inferred_cat, slots_found['brand'][1], "inferred_from_brand")
 
+        # Resolve conflicting price bounds or price corrections (e.g. "under 400 sorry above 5000")
+        if 'min_price' in slots_found and 'max_price' in slots_found:
+            min_val, min_w, min_prov = slots_found['min_price']
+            max_val, max_w, max_prov = slots_found['max_price']
+            is_explicit_range = ("price_range" in str(min_prov) and "price_range" in str(max_prov))
+
+            has_correction_between = False
+            first_w, second_w = sorted([min_w, max_w])
+            for t_idx in range(max(0, first_w - 1), min(len(tokens), second_w)):
+                if tokens[t_idx] in CORRECTION_SIGNALS:
+                    has_correction_between = True
+                    break
+
+            if not is_explicit_range and (min_val >= max_val or has_correction_between):
+                # The later price token supersedes the earlier one
+                if min_w > max_w:
+                    del slots_found['max_price']
+                else:
+                    del slots_found['min_price']
+
         # Update FilterState
         for slot in ('category', 'colour', 'brand', 'size', 'max_price', 'min_price'):
             if slot in slots_found:

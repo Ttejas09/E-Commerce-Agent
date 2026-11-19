@@ -398,6 +398,18 @@ export async function mockObserve(
   if (/^\d{3,5}$/.test(numClean) && !isNumericSize) {
     const priceVal = parseInt(numClean, 10);
     const targetSlot = isMinPrice ? "min_price" : "max_price";
+
+    // Resolve contradictory price bounds or corrections
+    if (targetSlot === "min_price") {
+      if (currentFilters.max_price && (Number(currentFilters.max_price.value) <= priceVal || (lastCorrectionWord ?? 0) > 0)) {
+        currentFilters.max_price = null;
+      }
+    } else {
+      if (currentFilters.min_price && (Number(currentFilters.min_price.value) >= priceVal || (lastCorrectionWord ?? 0) > 0)) {
+        currentFilters.min_price = null;
+      }
+    }
+
     currentFilters[targetSlot] = {
       value: priceVal,
       confidence: 0.92,
@@ -416,6 +428,16 @@ export async function mockObserve(
 
     if (computedPrice) {
       const targetSlot = isMinPrice ? "min_price" : "max_price";
+      if (targetSlot === "min_price") {
+        if (currentFilters.max_price && (Number(currentFilters.max_price.value) <= computedPrice || (lastCorrectionWord ?? 0) > 0)) {
+          currentFilters.max_price = null;
+        }
+      } else {
+        if (currentFilters.min_price && (Number(currentFilters.min_price.value) >= computedPrice || (lastCorrectionWord ?? 0) > 0)) {
+          currentFilters.min_price = null;
+        }
+      }
+
       currentFilters[targetSlot] = {
         value: computedPrice,
         confidence: 0.96,
@@ -426,6 +448,11 @@ export async function mockObserve(
     }
   } else if (clean === "0.8k") {
     const targetSlot = isMinPrice ? "min_price" : "max_price";
+    if (targetSlot === "min_price") {
+      currentFilters.max_price = null;
+    } else {
+      currentFilters.min_price = null;
+    }
     currentFilters[targetSlot] = {
       value: 800,
       confidence: 0.95,
