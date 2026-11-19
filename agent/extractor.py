@@ -565,7 +565,7 @@ class IncrementalExtractor:
                 plen = len(phrase)
                 if tokens[i:i+plen] == phrase:
                     matched_brand = brand_name
-                    register_slot('brand', matched_brand, i + 1, "multi_brand", i)
+                    register_slot('brand', matched_brand, i + 1, " ".join(phrase), i)
                     i += plen
                     break
             if matched_brand:
@@ -573,7 +573,7 @@ class IncrementalExtractor:
 
             # 2. Single-word brand (exact match)
             if tok in BRANDS_LOWER:
-                register_slot('brand', BRANDS_LOWER[tok], i + 1, "brand", i)
+                register_slot('brand', BRANDS_LOWER[tok], i + 1, tok, i)
                 i += 1
                 continue
 
@@ -585,7 +585,7 @@ class IncrementalExtractor:
                         matched_fuzzy_brand = b_orig
                         break
                 if matched_fuzzy_brand:
-                    register_slot('brand', matched_fuzzy_brand, i + 1, "brand_fuzzy", i)
+                    register_slot('brand', matched_fuzzy_brand, i + 1, tok, i)
                     i += 1
                     continue
 
@@ -605,7 +605,7 @@ class IncrementalExtractor:
                             break
                     if match:
                         matched_cat = cat_name
-                        register_slot('category', matched_cat, i + 1, "multi_cat", i)
+                        register_slot('category', matched_cat, i + 1, " ".join(window), i)
                         i += plen
                         break
             if matched_cat:
@@ -613,7 +613,7 @@ class IncrementalExtractor:
 
             # 5. Single-word categories (exact + synonyms)
             if tok in SINGLE_WORD_CATEGORIES:
-                register_slot('category', SINGLE_WORD_CATEGORIES[tok], i + 1, "cat", i)
+                register_slot('category', SINGLE_WORD_CATEGORIES[tok], i + 1, tok, i)
                 i += 1
                 continue
 
@@ -625,7 +625,7 @@ class IncrementalExtractor:
                         matched_fuzzy_cat = c_canon
                         break
                 if matched_fuzzy_cat:
-                    register_slot('category', matched_fuzzy_cat, i + 1, "cat_fuzzy", i)
+                    register_slot('category', matched_fuzzy_cat, i + 1, tok, i)
                     i += 1
                     continue
 
@@ -635,7 +635,7 @@ class IncrementalExtractor:
                 plen = len(phrase)
                 if tokens[i:i+plen] == phrase:
                     matched_col = col_name
-                    register_slot('colour', matched_col, i + 1, "compound_colour", i)
+                    register_slot('colour', matched_col, i + 1, " ".join(phrase), i)
                     i += plen
                     break
             if matched_col:
@@ -643,11 +643,11 @@ class IncrementalExtractor:
 
             # 8. Single-word colours
             if tok in COLOURS:
-                register_slot('colour', tok, i + 1, "colour", i)
+                register_slot('colour', tok, i + 1, tok, i)
                 i += 1
                 continue
             if tok in COLOUR_MAP:
-                register_slot('colour', COLOUR_MAP[tok], i + 1, "colour_map", i)
+                register_slot('colour', COLOUR_MAP[tok], i + 1, tok, i)
                 i += 1
                 continue
 
@@ -659,29 +659,29 @@ class IncrementalExtractor:
                 if self.correction_seen:
                     opp = 'max_price' if slot_key == 'min_price' else 'min_price'
                     slots_found.pop(opp, None)
-                register_slot(slot_key, val, i + 1, "price", i)
+                register_slot(slot_key, val, i + 1, " ".join(tokens[i:end_idx]), i)
                 i = end_idx
                 continue
 
             # 10. Size phrases
             if tokens[i:i+2] == ['extra', 'large']:
-                register_slot('size', 'XL', i + 1, "size_phrase", i)
+                register_slot('size', 'XL', i + 1, "extra large", i)
                 i += 2
                 continue
             if tokens[i:i+2] == ['extra', 'small']:
-                register_slot('size', 'XS', i + 1, "size_phrase", i)
+                register_slot('size', 'XS', i + 1, "extra small", i)
                 i += 2
                 continue
             if tokens[i:i+3] == ['double', 'extra', 'large']:
-                register_slot('size', 'XXL', i + 1, "size_phrase", i)
+                register_slot('size', 'XXL', i + 1, "double extra large", i)
                 i += 3
                 continue
             if tokens[i:i+2] == ['double', 'xl']:
-                register_slot('size', 'XXL', i + 1, "size_phrase", i)
+                register_slot('size', 'XXL', i + 1, "double xl", i)
                 i += 2
                 continue
             if tok in ('small', 'medium', 'large', 'xs', 'xl', 'xxl', '2xl'):
-                register_slot('size', SIZE_WORDS.get(tok, tok.upper()), i + 1, "size_word", i)
+                register_slot('size', SIZE_WORDS.get(tok, tok.upper()), i + 1, tok, i)
                 i += 1
                 continue
 
@@ -823,6 +823,12 @@ class IncrementalExtractor:
                         consumed_tokens.add(word)
                 for word in str(fv.value).lower().split():
                     consumed_tokens.add(word)
+
+        if self.state.size is not None:
+            consumed_tokens.update({
+                'extra', 'small', 'medium', 'large', 'xs', 'xl', 'xxl', '2xl', 'xxs',
+                'size', 'uk', 'waist', 'number', 'double'
+            })
 
         res_tokens = []
         for t in tokens:

@@ -65,4 +65,5 @@ export const SLOT_ACCENTS: Record<string, { label: string; lightBg: string; text
   size: { label: "Size", lightBg: "#FCF2DE", text: "#8A5A13", border: "#F5DEC0" },
   max_price: { label: "Budget", lightBg: "#F7EDF0", text: "#872B40", border: "#EACCD4" },
   min_price: { label: "Min Price", lightBg: "#F7EDF0", text: "#872B40", border: "#EACCD4" },
+  descriptor: { label: "Style / Vibe", lightBg: "#EDE9FE", text: "#6D28D9", border: "#DDD6FE" },
 };

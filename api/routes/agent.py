@@ -126,6 +126,9 @@ async def observe(req: ObserveRequest):
 
         committed_summary: Optional[ProductSummary] = None
         commit_id = out.get("commit") if out else None
+        if not commit_id and session.agent.has_committed and session.agent.committed_product_id:
+            commit_id = session.agent.committed_product_id
+
         if commit_id and commit_id in _CATALOGUE_PRODUCTS:
             committed_summary = _to_product_summary(_CATALOGUE_PRODUCTS[commit_id])
 
@@ -150,7 +153,11 @@ async def observe(req: ObserveRequest):
                 # commit early and perform the single official search so 0 wasted searches occur!
                 in_cooldown = session.agent.extractor.is_in_cooldown(session.last_word_index)
                 if not commit_id and not session.agent.has_committed and not in_cooldown:
-                    if len(matches) == 1 and session.agent.extractor.state.category is not None:
+                    is_unique_winner = (
+                        len(matches) == 1
+                        or (len(matches) > 1 and matches[0].get("score", 0) > matches[1].get("score", 0))
+                    )
+                    if is_unique_winner and session.agent.extractor.state.category is not None:
                         predicted_pid = matches[0]["product_id"]
                         if predicted_pid in _CATALOGUE_PRODUCTS:
                             commit_id = predicted_pid
@@ -158,13 +165,12 @@ async def observe(req: ObserveRequest):
                             session.agent.has_committed = True
                             session.agent.committed_product_id = commit_id
                             session.agent.commit_filters_snapshot = dict(active_filters)
-                            confidence = 0.98
                             if session.agent.search_ctrl.searches_used == 0:
                                 session.agent.search_ctrl.searches_used = 1
                                 session.agent.tools.searches = 1
                                 session.agent.search_ctrl.last_results = matches
 
-        confidence = out.get("confidence", 0.5) if out else 0.5
+        confidence = 1.0 if commit_id else (out.get("confidence", 0.5) if out else 0.5)
         reason = "commit" if commit_id else "observing"
 
         return ObserveResponse(
@@ -250,6 +256,9 @@ async def websocket_stream(websocket: WebSocket):
 
                 out = session.agent.observe(word)
                 commit_id = out.get("commit") if out else None
+                if not commit_id and session.agent.has_committed and session.agent.committed_product_id:
+                    commit_id = session.agent.committed_product_id
+
                 committed_summary = None
                 if commit_id and commit_id in _CATALOGUE_PRODUCTS:
                     committed_summary = _to_product_summary(_CATALOGUE_PRODUCTS[commit_id]).model_dump()
@@ -272,7 +281,11 @@ async def websocket_stream(websocket: WebSocket):
 
                         in_cooldown = session.agent.extractor.is_in_cooldown(session.last_word_index)
                         if not commit_id and not session.agent.has_committed and not in_cooldown:
-                            if len(matches) == 1 and session.agent.extractor.state.category is not None:
+                            is_unique_winner = (
+                                len(matches) == 1
+                                or (len(matches) > 1 and matches[0].get("score", 0) > matches[1].get("score", 0))
+                            )
+                            if is_unique_winner and session.agent.extractor.state.category is not None:
                                 predicted_pid = matches[0]["product_id"]
                                 if predicted_pid in _CATALOGUE_PRODUCTS:
                                     commit_id = predicted_pid
@@ -290,7 +303,7 @@ async def websocket_stream(websocket: WebSocket):
                     "committed_product": committed_summary,
                     "top_candidates": top_candidates,
                     "filters": _to_schema_filters(session.agent.extractor.state).model_dump(),
-                    "confidence": out.get("confidence", 0.5) if out else 0.5,
+                    "confidence": 1.0 if commit_id else (out.get("confidence", 0.5) if out else 0.5),
                     "searches_used": session.agent.search_ctrl.searches_used,
                     "searches_remaining": session.agent.search_ctrl.searches_remaining,
                     "reason": "commit" if commit_id else "observing",

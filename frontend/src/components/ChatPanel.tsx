@@ -83,8 +83,56 @@ export function ChatPanel({
   ] as const) {
     const fv = filters[slotKey];
     if (fv) {
+      // Map all tokens in provenance
       for (const p of fv.provenance) {
-        slotMap.set(p.toLowerCase().replace(/[,.\-!?;:'"]/g, ""), slotKey);
+        for (const token of p.toLowerCase().split(/\s+/)) {
+          const cleanToken = token.replace(/[,.\-!?;:'"]/g, "");
+          if (cleanToken) slotMap.set(cleanToken, slotKey);
+        }
+      }
+      // Map all tokens in canonical value
+      for (const token of String(fv.value).toLowerCase().split(/\s+/)) {
+        const cleanToken = token.replace(/[,.\-!?;:'"]/g, "");
+        if (cleanToken) slotMap.set(cleanToken, slotKey);
+      }
+    }
+  }
+
+  // Size multi-word aliases mapping
+  if (filters.size) {
+    const sVal = String(filters.size.value).toUpperCase();
+    if (sVal === "XS") {
+      slotMap.set("extra", "size");
+      slotMap.set("small", "size");
+      slotMap.set("xs", "size");
+    } else if (sVal === "XL") {
+      slotMap.set("extra", "size");
+      slotMap.set("large", "size");
+      slotMap.set("xl", "size");
+    } else if (sVal === "XXL") {
+      slotMap.set("double", "size");
+      slotMap.set("extra", "size");
+      slotMap.set("large", "size");
+      slotMap.set("xxl", "size");
+      slotMap.set("2xl", "size");
+    } else if (sVal === "S") {
+      slotMap.set("small", "size");
+      slotMap.set("s", "size");
+    } else if (sVal === "M") {
+      slotMap.set("medium", "size");
+      slotMap.set("m", "size");
+    } else if (sVal === "L") {
+      slotMap.set("large", "size");
+      slotMap.set("l", "size");
+    }
+  }
+
+  // Map descriptor vibe tokens (e.g. "denim", "corduroy", "bomber") to descriptor badge
+  if (filters.residual_tokens) {
+    for (const r of filters.residual_tokens) {
+      const cleanR = r.toLowerCase().replace(/[,.\-!?;:'"]/g, "");
+      if (cleanR && !slotMap.has(cleanR)) {
+        slotMap.set(cleanR, "descriptor");
       }
     }
   }
