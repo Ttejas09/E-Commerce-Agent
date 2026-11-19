@@ -54,6 +54,7 @@ class FilterState:
             fv: Optional[FilterValue] = getattr(self, slot)
             return fv.value if fv is not None else None
 
+        exc_sig = tuple(sorted((k, tuple(sorted(v))) for k, v in self.excluded.items()))
         return (
             _val("category"),
             _val("colour"),
@@ -62,7 +63,22 @@ class FilterState:
             _val("max_price"),
             _val("min_price"),
             tuple(sorted(self.residual_tokens)),
+            exc_sig,
         )
+
+    def exclude_filter(self, slot: str, value: str) -> None:
+        """Add an excluded attribute value (e.g. for 'not black', 'except jeans')."""
+        if slot not in self.excluded:
+            self.excluded[slot] = set()
+        self.excluded[slot].add(str(value).lower())
+
+    def is_excluded(self, product: dict) -> bool:
+        """Check if product matches any excluded slot value."""
+        for slot, exc_vals in self.excluded.items():
+            prod_val = str(product.get(slot, "")).lower()
+            if prod_val and prod_val in exc_vals:
+                return True
+        return False
 
     def num_filters(self) -> int:
         """Count of non-None structured filter slots."""

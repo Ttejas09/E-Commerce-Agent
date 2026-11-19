@@ -3,11 +3,12 @@
 > **Rezolve AI × Techfest, IIT Bombay 2026–27 — Problem Statement 1**  
 > An ultra-low-latency, zero-wrong-commit anticipatory shopping agent that predicts shopper filters from streaming words, searches early, and commits to the target product before the customer finishes speaking.
 
-[![Tests](https://img.shields.io/badge/tests-25%20passed%20(40ms)-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-30%20passed%20(42ms)-brightgreen)]()
 [![Accuracy](https://img.shields.io/badge/accuracy-100%25-brightgreen)]()
 [![Wrong Commits](https://img.shields.io/badge/wrong%20commits-0-brightgreen)]()
 [![Latency](https://img.shields.io/badge/latency%20p95-0.21ms-blue)]()
-[![Score](https://img.shields.io/badge/score-41.6%20vs%2020.0-gold)]()
+[![Searches](https://img.shields.io/badge/searches-1.00%20(zero%20waste)-brightgreen)]()
+[![Score](https://img.shields.io/badge/score-42.2%20vs%2020.0-gold)]()
 
 ---
 
@@ -20,15 +21,15 @@ Evaluated with the official competition harness (`evaluate.py`) across all 300 r
 | **Accuracy** | 52.7% | $\ge 78.0\%$ | **100.0%** (300/300) | **100.0%** (100/100) |
 | **Wrong Commits** | 0 | **0** | **0** | **0** |
 | **Earliness Share** | 0.0% | $\ge 3.0\%$ | **3.7%** (0.51 words early) | **3.4%** (0.48 words early) |
-| **Searches / Request** | 1.53 | $\le 2.50$ | **1.30** (wasted 0.30) | **1.30** (wasted 0.30) |
+| **Searches / Request** | 1.53 | $\le 2.50$ | **1.00** (wasted 0.00) | **1.00** (wasted 0.00) |
 | **Latency (p95)** | 0.00 ms | $< 10.0\text{ ms/word}$ | **0.21 ms/word** | **0.19 ms/word** |
-| **Average Score** | 20.0 | $\ge 40.0$ | **41.6** | **41.4** |
+| **Average Score** | 20.0 | $\ge 40.0$ | **42.2** | **42.0** |
 
 ### Per-Tag Breakdown (`dev.jsonl`)
-* **`plain`** (177 reqs): Accuracy **100.0%** | Wrong **0** | Score **41.8**
-* **`correction`** (55 reqs): Accuracy **100.0%** | Wrong **0** | Score **41.0**
-* **`late_constraint`** (50 reqs): Accuracy **100.0%** | Wrong **0** | Score **41.2**
+* **`plain`** (177 reqs): Accuracy **100.0%** | Wrong **0** | Score **42.5**
 * **`code_mixed`** (25 reqs): Accuracy **100.0%** | Wrong **0** | Score **42.0**
+* **`correction`** (55 reqs): Accuracy **100.0%** | Wrong **0** | Score **41.7**
+* **`late_constraint`** (50 reqs): Accuracy **100.0%** | Wrong **0** | Score **41.7**
 
 ---
 

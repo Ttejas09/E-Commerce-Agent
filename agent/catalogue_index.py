@@ -70,6 +70,41 @@ def _build_index(csv_path: Path = _DEFAULT_CSV):
     ALL_SIZES,
 ) = _build_index()
 
+# Dynamically derive single-category brand exclusivity and single-category size exclusivity
+BRAND_EXCLUSIVE_CATEGORY: Dict[str, str] = {
+    b: next(iter(cats)) for b, cats in BRAND_CATEGORIES.items() if len(cats) == 1
+}
+
+SIZE_EXCLUSIVE_CATEGORY: Dict[str, str] = {
+    s: next(iter(cats)) for s, cats in SIZE_CATEGORIES.items() if len(cats) == 1
+}
+
+
+def reindex_catalogue(csv_path: Path) -> None:
+    """Rebuild all static indices from an alternative or updated catalogue CSV."""
+    global CATEGORIES, BRANDS, BRANDS_LOWER, COLOURS
+    global CATEGORY_SIZES, SIZE_CATEGORIES, BRAND_CATEGORIES, CATEGORY_BRANDS
+    global ALL_SIZES, BRAND_EXCLUSIVE_CATEGORY, SIZE_EXCLUSIVE_CATEGORY
+
+    (
+        CATEGORIES,
+        BRANDS,
+        BRANDS_LOWER,
+        COLOURS,
+        CATEGORY_SIZES,
+        SIZE_CATEGORIES,
+        BRAND_CATEGORIES,
+        CATEGORY_BRANDS,
+        ALL_SIZES,
+    ) = _build_index(csv_path)
+
+    BRAND_EXCLUSIVE_CATEGORY = {
+        b: next(iter(cats)) for b, cats in BRAND_CATEGORIES.items() if len(cats) == 1
+    }
+    SIZE_EXCLUSIVE_CATEGORY = {
+        s: next(iter(cats)) for s, cats in SIZE_CATEGORIES.items() if len(cats) == 1
+    }
+
 
 def is_valid_size(size: str, category: Optional[str] = None) -> bool:
     """Check whether size is valid, optionally within a specific category."""

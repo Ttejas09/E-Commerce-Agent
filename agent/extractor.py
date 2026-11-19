@@ -18,14 +18,14 @@ if str(_AGENT_DIR) not in sys.path:
 try:
     from agent.catalogue_index import (
         CATEGORIES, BRANDS, BRANDS_LOWER, COLOURS, ALL_SIZES, CATEGORY_SIZES,
-        BRAND_CATEGORIES
+        BRAND_CATEGORIES, BRAND_EXCLUSIVE_CATEGORY, SIZE_EXCLUSIVE_CATEGORY
     )
     from agent.filters import FilterState, FilterValue
     from agent.config import CORRECTION_COOLDOWN, FUZZY_MIN_LEN
 except (ImportError, ModuleNotFoundError):
     from catalogue_index import (
         CATEGORIES, BRANDS, BRANDS_LOWER, COLOURS, ALL_SIZES, CATEGORY_SIZES,
-        BRAND_CATEGORIES
+        BRAND_CATEGORIES, BRAND_EXCLUSIVE_CATEGORY, SIZE_EXCLUSIVE_CATEGORY
     )
     from filters import FilterState, FilterValue
     from config import CORRECTION_COOLDOWN, FUZZY_MIN_LEN
@@ -82,6 +82,7 @@ MULTI_WORD_CATEGORIES = [
     (['casual', 'shoes'], 'sneakers'),
     (['running', 'shoes'], 'running shoes'),
     (['running', 'sneakers'], 'running shoes'),
+    (['running', 'shoe'], 'running shoes'),
     (['jogging', 'shoes'], 'running shoes'),
     (['sport', 'shoes'], 'running shoes'),
     (['sports', 'shoes'], 'running shoes'),
@@ -95,37 +96,28 @@ MULTI_WORD_CATEGORIES = [
     (['t', 'shirts'], 't-shirts'),
     (['bag', 'pack'], 'backpacks'),
     (['bag', 'packs'], 'backpacks'),
+    (['flip', 'flops'], 'sandals'),
+    (['ethnic', 'wear'], 'kurtas'),
 ]
 
 SINGLE_WORD_CATEGORIES = {
-    'sneakers': 'sneakers', 'sneaker': 'sneakers', 'kicks': 'sneakers', 'trainers': 'sneakers', 'trainer': 'sneakers', 'loafers': 'sneakers',
-    'sandals': 'sandals', 'sandal': 'sandals', 'slides': 'sandals', 'floaters': 'sandals', 'chappal': 'sandals', 'chappals': 'sandals', 'slippers': 'sandals',
-    'hoodies': 'hoodies', 'hoodie': 'hoodies', 'hoody': 'hoodies', 'sweatshirt': 'hoodies', 'sweatshirts': 'hoodies',
-    'jackets': 'jackets', 'jacket': 'jackets',
-    'jeans': 'jeans', 'jean': 'jeans', 'denims': 'jeans', 'denim': 'jeans',
+    'sneakers': 'sneakers', 'sneaker': 'sneakers', 'kicks': 'sneakers', 'trainers': 'sneakers', 'trainer': 'sneakers', 'loafers': 'sneakers', 'cleats': 'running shoes',
+    'sandals': 'sandals', 'sandal': 'sandals', 'slides': 'sandals', 'floaters': 'sandals', 'chappal': 'sandals', 'chappals': 'sandals', 'slippers': 'sandals', 'flip-flops': 'sandals', 'flipflops': 'sandals', 'sandels': 'sandals',
+    'hoodies': 'hoodies', 'hoodie': 'hoodies', 'hoody': 'hoodies', 'sweatshirt': 'hoodies', 'sweatshirts': 'hoodies', 'pullover': 'hoodies',
+    'jackets': 'jackets', 'jacket': 'jackets', 'windbreaker': 'jackets', 'windbreakers': 'jackets', 'coat': 'jackets', 'blazer': 'jackets',
+    'jeans': 'jeans', 'jean': 'jeans', 'denims': 'jeans', 'denim': 'jeans', 'chinos': 'jeans',
     'kurtas': 'kurtas', 'kurta': 'kurtas', 'kurti': 'kurtas', 'kurties': 'kurtas',
     'dresses': 'dresses', 'dress': 'dresses',
-    'caps': 'caps', 'cap': 'caps',
-    'backpacks': 'backpacks', 'backpack': 'backpacks', 'rucksack': 'backpacks', 'baig': 'backpacks', 'bag': 'backpacks',
-    'wallets': 'wallets', 'wallet': 'wallets',
-    'watches': 'watches', 'watch': 'watches', 'wristwatch': 'watches', 'ghadi': 'watches',
-    'headphones': 'headphones', 'headphone': 'headphones', 'headset': 'headphones',
+    'caps': 'caps', 'cap': 'caps', 'hat': 'caps', 'beanie': 'caps',
+    'backpacks': 'backpacks', 'backpack': 'backpacks', 'rucksack': 'backpacks', 'baig': 'backpacks', 'bag': 'backpacks', 'pack': 'backpacks',
+    'wallets': 'wallets', 'wallet': 'wallets', 'purse': 'wallets',
+    'watches': 'watches', 'watch': 'watches', 'wristwatch': 'watches', 'ghadi': 'watches', 'timepiece': 'watches', 'chronograph': 'watches',
+    'headphones': 'headphones', 'headphone': 'headphones', 'headset': 'headphones', 'earphones': 'headphones', 'earphone': 'headphones', 'earbuds': 'headphones', 'earbud': 'headphones', 'airpods': 'headphones',
     'shirts': 'shirts', 'shirt': 'shirts',
-    'trackpants': 'track pants', 'joggers': 'track pants', 'lower': 'track pants', 'trousers': 'track pants', 'trouser': 'track pants', 'pajama': 'track pants', 'pajamas': 'track pants',
+    'trackpants': 'track pants', 'joggers': 'track pants', 'lower': 'track pants', 'lowers': 'track pants', 'trousers': 'track pants', 'trouser': 'track pants', 'pajama': 'track pants', 'pajamas': 'track pants', 'bottoms': 'track pants', 'trackies': 'track pants',
     'tshirt': 't-shirts', 'tshirts': 't-shirts', 'tee': 't-shirts', 'tees': 't-shirts', 't-shirt': 't-shirts', 't-shirts': 't-shirts', 'polo': 't-shirts', 'polos': 't-shirts', 'top': 't-shirts',
     'runners': 'running shoes',
     'joota': 'sneakers', 'joote': 'sneakers', 'juta': 'sneakers', 'jute': 'sneakers',
-}
-
-# Single-category brand guarantees:
-BRAND_EXCLUSIVE_CATEGORY = {
-    'audora': 'headphones',
-    'horavo': 'watches',
-    'tikkra': 'watches',
-    'sonquil': 'headphones',
-    'packwise': 'backpacks',
-    'kesar loom': 'kurtas',
-    'ledgerly': 'wallets',
 }
 
 MULTI_WORD_BRANDS = [
@@ -149,14 +141,40 @@ COMPOUND_COLOURS = [
 COLOUR_MAP = {
     'gray': 'grey',
     'charcoal': 'grey',
+    'slate': 'grey',
+    'ash': 'grey',
     'golden': 'gold',
     'cream': 'beige',
     'ivory': 'white',
+    'off-white': 'white',
+    'offwhite': 'white',
     'burgundy': 'maroon',
+    'wine': 'maroon',
+    'cherry': 'maroon',
     'crimson': 'red',
     'scarlet': 'red',
+    'ruby': 'red',
     'mustard': 'yellow',
+    'amber': 'yellow',
+    'ochre': 'yellow',
     'khaki': 'tan',
+    'camel': 'brown',
+    'coffee': 'brown',
+    'chocolate': 'brown',
+    'teal': 'blue',
+    'cyan': 'blue',
+    'turquoise': 'blue',
+    'sky': 'blue',
+    'indigo': 'navy',
+    'darkblue': 'navy',
+    'magenta': 'pink',
+    'rose': 'pink',
+    'peach': 'pink',
+    'salmon': 'pink',
+    'emerald': 'green',
+    'mint': 'green',
+    'forest': 'green',
+    'moss': 'green',
     'kaala': 'black', 'kala': 'black',
     'safed': 'white',
     'neela': 'blue', 'nila': 'blue',
@@ -165,6 +183,17 @@ COLOUR_MAP = {
     'peela': 'yellow', 'pila': 'yellow',
     'bhoora': 'brown', 'bhura': 'brown',
     'gulabi': 'pink',
+}
+
+SIZE_HOMOPHONES = {
+    'too': '2', 'to': '2',
+    'for': '4', 'fore': '4',
+    'ate': '8',
+    'won': '1',
+}
+
+NEGATION_WORDS = {
+    'not', 'dont', "don't", 'except', 'excluding', 'without', 'neither', 'nor', 'bina'
 }
 
 SIZE_WORDS = {
@@ -211,7 +240,9 @@ STOPWORDS = {
     'mera', 'mere', 'liye', 'hai', 'ho', 'dikhao', 'dikhaiye', 'batao', 'wala', 'wali',
     'mein', 'me', 'ka', 'ki', 'ke', 'ek', 'bhaiya', 'na', 'aur', 'haan', 'baat',
     'uh', 'hmm', 'has', 'be', 'from', 'by', 'brand', 'only', 'more', 'than', 'rupees', 'rs',
-    'inr', 'bucks', 'approx', 'around', 'about', 'as', 'badhiya', 'sa'
+    'inr', 'bucks', 'approx', 'around', 'about', 'as', 'badhiya', 'sa',
+    'bhai', 'yaar', 'dost', 'kripya', 'dekho', 'wale', 'achha', 'sahi', 'latest',
+    'thoda', 'sasta', 'mehenga', 'waala'
 }
 
 
@@ -331,10 +362,30 @@ class IncrementalExtractor:
         return self.state
 
     def _extract_all_slots(self, current_word_index: int) -> None:
-        """Extract structured filters from the sequence of tokens seen so far."""
+        """Extract structured filters from the sequence of tokens seen so far,
+        including negation awareness and homophone disambiguation.
+        """
         tokens = self.tokens
         n = len(tokens)
         slots_found: Dict[str, Tuple[any, int, str]] = {}
+
+        def is_negated(start_i: int) -> bool:
+            if start_i > 0 and tokens[start_i - 1] in NEGATION_WORDS:
+                return True
+            if start_i > 1 and (
+                tokens[start_i - 2:start_i] == ['other', 'than']
+                or tokens[start_i - 2:start_i] == ['instead', 'of']
+            ):
+                return True
+            return False
+
+        def register_slot(slot_name: str, val: any, w_idx: int, prov: str, start_i: int):
+            if is_negated(start_i):
+                self.state.exclude_filter(slot_name, str(val))
+                if slot_name in slots_found:
+                    del slots_found[slot_name]
+            else:
+                slots_found[slot_name] = (val, w_idx, prov)
 
         i = 0
         while i < n:
@@ -346,7 +397,7 @@ class IncrementalExtractor:
                 plen = len(phrase)
                 if tokens[i:i+plen] == phrase:
                     matched_brand = brand_name
-                    slots_found['brand'] = (matched_brand, i + 1, "multi_brand")
+                    register_slot('brand', matched_brand, i + 1, "multi_brand", i)
                     i += plen
                     break
             if matched_brand:
@@ -354,7 +405,7 @@ class IncrementalExtractor:
 
             # 2. Single-word brand (exact match)
             if tok in BRANDS_LOWER:
-                slots_found['brand'] = (BRANDS_LOWER[tok], i + 1, "brand")
+                register_slot('brand', BRANDS_LOWER[tok], i + 1, "brand", i)
                 i += 1
                 continue
 
@@ -366,7 +417,7 @@ class IncrementalExtractor:
                         matched_fuzzy_brand = b_orig
                         break
                 if matched_fuzzy_brand:
-                    slots_found['brand'] = (matched_fuzzy_brand, i + 1, "brand_fuzzy")
+                    register_slot('brand', matched_fuzzy_brand, i + 1, "brand_fuzzy", i)
                     i += 1
                     continue
 
@@ -386,7 +437,7 @@ class IncrementalExtractor:
                             break
                     if match:
                         matched_cat = cat_name
-                        slots_found['category'] = (matched_cat, i + 1, "multi_cat")
+                        register_slot('category', matched_cat, i + 1, "multi_cat", i)
                         i += plen
                         break
             if matched_cat:
@@ -394,7 +445,7 @@ class IncrementalExtractor:
 
             # 5. Single-word categories (exact + synonyms)
             if tok in SINGLE_WORD_CATEGORIES:
-                slots_found['category'] = (SINGLE_WORD_CATEGORIES[tok], i + 1, "cat")
+                register_slot('category', SINGLE_WORD_CATEGORIES[tok], i + 1, "cat", i)
                 i += 1
                 continue
 
@@ -406,7 +457,7 @@ class IncrementalExtractor:
                         matched_fuzzy_cat = c_canon
                         break
                 if matched_fuzzy_cat:
-                    slots_found['category'] = (matched_fuzzy_cat, i + 1, "cat_fuzzy")
+                    register_slot('category', matched_fuzzy_cat, i + 1, "cat_fuzzy", i)
                     i += 1
                     continue
 
@@ -416,7 +467,7 @@ class IncrementalExtractor:
                 plen = len(phrase)
                 if tokens[i:i+plen] == phrase:
                     matched_col = col_name
-                    slots_found['colour'] = (matched_col, i + 1, "compound_colour")
+                    register_slot('colour', matched_col, i + 1, "compound_colour", i)
                     i += plen
                     break
             if matched_col:
@@ -424,11 +475,11 @@ class IncrementalExtractor:
 
             # 8. Single-word colours
             if tok in COLOURS:
-                slots_found['colour'] = (tok, i + 1, "colour")
+                register_slot('colour', tok, i + 1, "colour", i)
                 i += 1
                 continue
             if tok in COLOUR_MAP:
-                slots_found['colour'] = (COLOUR_MAP[tok], i + 1, "colour_map")
+                register_slot('colour', COLOUR_MAP[tok], i + 1, "colour_map", i)
                 i += 1
                 continue
 
@@ -436,81 +487,93 @@ class IncrementalExtractor:
             p_res = parse_price_phrase(tokens, i)
             if p_res:
                 val, end_idx = p_res
-                slots_found['max_price'] = (val, i + 1, "price")
+                register_slot('max_price', val, i + 1, "price", i)
                 i = end_idx
                 continue
 
             # 10. Size phrases
             if tokens[i:i+2] == ['extra', 'large']:
-                slots_found['size'] = ('XL', i + 1, "size_phrase")
+                register_slot('size', 'XL', i + 1, "size_phrase", i)
                 i += 2
                 continue
             if tokens[i:i+2] == ['extra', 'small']:
-                slots_found['size'] = ('XS', i + 1, "size_phrase")
+                register_slot('size', 'XS', i + 1, "size_phrase", i)
                 i += 2
                 continue
             if tokens[i:i+3] == ['double', 'extra', 'large']:
-                slots_found['size'] = ('XXL', i + 1, "size_phrase")
+                register_slot('size', 'XXL', i + 1, "size_phrase", i)
                 i += 3
                 continue
             if tokens[i:i+2] == ['double', 'xl']:
-                slots_found['size'] = ('XXL', i + 1, "size_phrase")
+                register_slot('size', 'XXL', i + 1, "size_phrase", i)
                 i += 2
                 continue
             if tok in ('small', 'medium', 'large', 'xs', 'xl', 'xxl', '2xl'):
-                slots_found['size'] = (SIZE_WORDS.get(tok, tok.upper()), i + 1, "size_word")
+                register_slot('size', SIZE_WORDS.get(tok, tok.upper()), i + 1, "size_word", i)
                 i += 1
                 continue
 
-            if tok in ('size', 'uk', 'waist') and i + 1 < n:
+            if tok in ('size', 'uk', 'waist', 'number') and i + 1 < n:
                 next_t = tokens[i+1]
-                num = ENGLISH_NUMBERS.get(next_t) or HINDI_NUMBERS.get(next_t)
+                num = (
+                    ENGLISH_NUMBERS.get(next_t)
+                    or HINDI_NUMBERS.get(next_t)
+                    or SIZE_HOMOPHONES.get(next_t)
+                )
                 if num is not None and str(num) in ALL_SIZES:
-                    slots_found['size'] = (str(num), i + 1, "size_cue")
+                    register_slot('size', str(num), i + 1, "size_cue", i)
                     i += 2
                     continue
                 elif next_t in ALL_SIZES:
-                    slots_found['size'] = (next_t.upper() if next_t.isalpha() else next_t, i + 1, "size_cue")
+                    register_slot('size', next_t.upper() if next_t.isalpha() else next_t, i + 1, "size_cue", i)
                     i += 2
                     continue
                 elif next_t.upper() in ALL_SIZES:
-                    slots_found['size'] = (next_t.upper(), i + 1, "size_cue")
+                    register_slot('size', next_t.upper(), i + 1, "size_cue", i)
                     i += 2
                     continue
 
             if i + 1 < n and tokens[i+1] in ('uk', 'waist', 'size', 'number'):
-                num = ENGLISH_NUMBERS.get(tok) or HINDI_NUMBERS.get(tok)
+                num = (
+                    ENGLISH_NUMBERS.get(tok)
+                    or HINDI_NUMBERS.get(tok)
+                    or SIZE_HOMOPHONES.get(tok)
+                )
                 if num is not None and str(num) in ALL_SIZES:
-                    slots_found['size'] = (str(num), i + 1, "size_post_cue")
+                    register_slot('size', str(num), i + 1, "size_post_cue", i)
                     i += 2
                     continue
                 elif tok in ALL_SIZES:
-                    slots_found['size'] = (tok.upper() if tok.isalpha() else tok, i + 1, "size_post_cue")
+                    register_slot('size', tok.upper() if tok.isalpha() else tok, i + 1, "size_post_cue", i)
                     i += 2
                     continue
 
             if tok in ('actually', 'sorry', 'oops') and i + 1 < n:
                 next_t = tokens[i+1]
-                num = ENGLISH_NUMBERS.get(next_t) or HINDI_NUMBERS.get(next_t)
+                num = (
+                    ENGLISH_NUMBERS.get(next_t)
+                    or HINDI_NUMBERS.get(next_t)
+                    or SIZE_HOMOPHONES.get(next_t)
+                )
                 if num is not None and str(num) in ALL_SIZES:
-                    slots_found['size'] = (str(num), i + 1, "corr_size")
+                    register_slot('size', str(num), i + 1, "corr_size", i)
                     i += 2
                     continue
                 elif next_t in ALL_SIZES or next_t.upper() in ALL_SIZES:
-                    slots_found['size'] = (next_t.upper() if next_t.isalpha() else next_t, i + 1, "corr_size")
+                    register_slot('size', next_t.upper() if next_t.isalpha() else next_t, i + 1, "corr_size", i)
                     i += 2
                     continue
 
             i += 1
 
         # 11. Catalogue Grounding (Mutual Inference):
-        # A. If size is a waist size (28..36), the catalogue category can ONLY be 'jeans'
+        # A. If size is exclusively in ONE category (e.g. waist sizes in jeans), infer category:
         if 'size' in slots_found and 'category' not in slots_found:
-            s_val = slots_found['size'][0]
-            if s_val in ('28', '30', '32', '34', '36'):
-                slots_found['category'] = ('jeans', slots_found['size'][1], "inferred_from_waist")
+            s_val = str(slots_found['size'][0])
+            if s_val in SIZE_EXCLUSIVE_CATEGORY:
+                slots_found['category'] = (SIZE_EXCLUSIVE_CATEGORY[s_val], slots_found['size'][1], "inferred_from_size")
 
-        # B. If brand makes exclusively ONE category, infer category if missing
+        # B. If brand makes exclusively ONE category, infer category if missing:
         if 'brand' in slots_found and 'category' not in slots_found:
             b_low = str(slots_found['brand'][0]).lower()
             if b_low in BRAND_EXCLUSIVE_CATEGORY:

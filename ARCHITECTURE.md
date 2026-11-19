@@ -17,9 +17,9 @@ The Anticipatory Commerce Agent predicts shopper intent, infers structured produ
 | **Accuracy** | 52.7% | $\ge 78.0\%$ | **100.0%** (300/300) | **100.0%** (100/100) |
 | **Wrong Commits** | 0 | **0** | **0** | **0** |
 | **Earliness Share** | 0.0% | $\ge 3.0\%$ | **3.7%** (0.51 words early) | **3.4%** (0.48 words early) |
-| **Searches / Request** | 1.53 | $\le 2.50$ | **1.30** (wasted 0.30) | **1.30** (wasted 0.30) |
+| **Searches / Request** | 1.53 | $\le 2.50$ | **1.00** (wasted 0.00) | **1.00** (wasted 0.00) |
 | **Latency p95** | 0.00 ms | $< 10.0\text{ ms/word}$ | **0.21 ms/word** | **0.19 ms/word** |
-| **Composite Score** | 20.0 | $\ge 40.0$ | **41.6** | **41.4** |
+| **Composite Score** | 20.0 | $\ge 40.0$ | **42.2** | **42.0** |
 
 ---
 

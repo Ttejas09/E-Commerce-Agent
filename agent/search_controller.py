@@ -73,6 +73,11 @@ class SearchController:
         filters = state.get_search_filters()
         results = self.tools.search(query=residual_query, filters=filters, k=10)
         self.searches_used += 1
+
+        # Post-filter against any active negative exclusions (e.g. 'not black')
+        if state.excluded and results:
+            results = [p for p in results if not state.is_excluded(p)]
+
         self.cache[sig] = results
         self.last_search_signature = sig
         self.last_results = results
@@ -87,6 +92,15 @@ class SearchController:
         finish_budget = 8
         filters = state.get_search_filters()
 
+        def _exec_search(q: str, f: dict) -> List[Dict[str, Any]]:
+            if self.searches_used >= finish_budget:
+                return []
+            h = self.tools.search(query=q, filters=f, k=10)
+            self.searches_used += 1
+            if state.excluded and h:
+                h = [p for p in h if not state.is_excluded(p)]
+            return h
+
         # Check catalogue incompatibility: if brand doesn't make category, drop brand immediately
         b = str(filters.get("brand", "")).lower()
         c = str(filters.get("category", "")).lower()
@@ -95,61 +109,53 @@ class SearchController:
                 # Brand is incompatible with category! Drop brand first!
                 f_no_b = dict(filters)
                 f_no_b.pop("brand", None)
-                if self.searches_used < finish_budget:
-                    hits = self.tools.search(query=residual_query, filters=f_no_b, k=10)
-                    self.searches_used += 1
-                    if hits:
-                        return hits
+                hits = _exec_search(residual_query, f_no_b)
+                if hits:
+                    return hits
 
         # Step 1: Drop residual query
-        if residual_query and self.searches_used < finish_budget:
-            hits = self.tools.search(query="", filters=filters, k=10)
-            self.searches_used += 1
+        if residual_query:
+            hits = _exec_search("", filters)
             if hits:
                 return hits
 
         # Step 2: Relax max_price +15%
-        if "max_price" in filters and self.searches_used < finish_budget:
+        if "max_price" in filters:
             relaxed_filters = dict(filters)
             relaxed_filters["max_price"] = int(relaxed_filters["max_price"] * (1.0 + PRICE_AROUND_MARGIN))
-            hits = self.tools.search(query="", filters=relaxed_filters, k=10)
-            self.searches_used += 1
+            hits = _exec_search("", relaxed_filters)
             if hits:
                 return hits
 
         # Step 3: Drop brand
-        if "brand" in filters and self.searches_used < finish_budget:
+        if "brand" in filters:
             f3 = dict(filters)
             f3.pop("brand", None)
-            hits = self.tools.search(query="", filters=f3, k=10)
-            self.searches_used += 1
+            hits = _exec_search("", f3)
             if hits:
                 return hits
 
         # Step 4: Drop colour
-        if "colour" in filters and self.searches_used < finish_budget:
+        if "colour" in filters:
             f4 = dict(filters)
             f4.pop("brand", None)
             f4.pop("colour", None)
-            hits = self.tools.search(query="", filters=f4, k=10)
-            self.searches_used += 1
+            hits = _exec_search("", f4)
             if hits:
                 return hits
 
         # Step 5: Keep only category + size
-        if "category" in filters and self.searches_used < finish_budget:
+        if "category" in filters:
             f5 = {"category": filters["category"]}
             if "size" in filters:
                 f5["size"] = filters["size"]
-            hits = self.tools.search(query="", filters=f5, k=10)
-            self.searches_used += 1
+            hits = _exec_search("", f5)
             if hits:
                 return hits
 
         # Step 6: Fallback to category + residual query
-        if "category" in filters and self.searches_used < finish_budget:
-            hits = self.tools.search(query=residual_query, filters={"category": filters["category"]}, k=10)
-            self.searches_used += 1
+        if "category" in filters:
+            hits = _exec_search(residual_query, {"category": filters["category"]})
             if hits:
                 return hits
 

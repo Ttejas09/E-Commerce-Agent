@@ -46,6 +46,7 @@ class Agent:
         self.word_index = 0
         self.has_committed = False
         self.committed_product_id: Optional[str] = None
+        self.commit_filters_snapshot: Optional[Dict[str, Any]] = None
 
     def observe(self, word: str) -> Optional[Dict[str, Any]]:
         """Observe one more incoming word. Return None or dict."""
@@ -92,6 +93,7 @@ class Agent:
                 ):
                     self.has_committed = True
                     self.committed_product_id = results[0]["product_id"]
+                    self.commit_filters_snapshot = dict(state.get_search_filters())
                     commit_id = self.committed_product_id
 
         out = {
@@ -107,6 +109,14 @@ class Agent:
         """Finish the request and return the final predicted product_id."""
         self.extractor.flush()
         state = self.extractor.state
+
+        # If we already committed and core filters have not changed since commit,
+        # return the committed product directly without burning a redundant search!
+        if self.has_committed and self.committed_product_id:
+            current_filters = state.get_search_filters()
+            if current_filters == self.commit_filters_snapshot:
+                return self.committed_product_id
+
         residual = self.extractor.get_residual_query()
 
         results = self.search_ctrl.search(state, residual)
