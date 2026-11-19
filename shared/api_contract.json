@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Anticipatory Commerce Agent — API Contract",
+  "description": "Auto-generated from api/schemas.py. Single source of truth for frontend and backend integration.",
+  "schemas": {
+    "FilterKey": {
+      "type": "string",
+      "enum": ["category", "colour", "size", "brand", "max_price", "min_price"],
+      "title": "FilterKey"
+    },
+    "FilterValue": {
+      "type": "object",
+      "title": "FilterValue",
+      "properties": {
+        "value": {
+          "anyOf": [{"type": "string"}, {"type": "integer"}],
+          "title": "Value"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "title": "Confidence"
+        },
+        "word_index": {
+          "type": "integer",
+          "title": "Word Index"
+        },
+        "provenance": {
+          "type": "array",
+          "items": {"type": "string"},
+          "title": "Provenance"
+        }
+      },
+      "required": ["value", "confidence", "word_index", "provenance"]
+    },
+    "FilterState": {
+      "type": "object",
+      "title": "FilterState",
+      "properties": {
+        "category": {"$ref": "#/schemas/FilterValue"},
+        "colour": {"$ref": "#/schemas/FilterValue"},
+        "size": {"$ref": "#/schemas/FilterValue"},
+        "brand": {"$ref": "#/schemas/FilterValue"},
+        "max_price": {"$ref": "#/schemas/FilterValue"},
+        "min_price": {"$ref": "#/schemas/FilterValue"},
+        "residual_tokens": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": [],
+          "title": "Residual Tokens"
+        },
+        "version": {
+          "type": "integer",
+          "default": 0,
+          "title": "Version"
+        }
+      }
+    },
+    "ProductSummary": {
+      "type": "object",
+      "title": "ProductSummary",
+      "properties": {
+        "product_id": {"type": "string", "title": "Product Id"},
+        "title": {"type": "string", "title": "Title"},
+        "brand": {"type": "string", "title": "Brand"},
+        "category": {"type": "string", "title": "Category"},
+        "colour": {"type": "string", "title": "Colour"},
+        "size": {"type": "string", "title": "Size"},
+        "price": {"type": "integer", "title": "Price"}
+      },
+      "required": ["product_id", "title", "brand", "category", "colour", "size", "price"]
+    },
+    "StartRequest": {
+      "type": "object",
+      "title": "StartRequest",
+      "properties": {
+        "request_id": {"type": "string", "title": "Request Id"}
+      },
+      "required": ["request_id"]
+    },
+    "StartResponse": {
+      "type": "object",
+      "title": "StartResponse",
+      "properties": {
+        "status": {"type": "string", "default": "ready", "title": "Status"},
+        "request_id": {"type": "string", "title": "Request Id"}
+      },
+      "required": ["request_id"]
+    },
+    "ObserveRequest": {
+      "type": "object",
+      "title": "ObserveRequest",
+      "properties": {
+        "request_id": {"type": "string", "title": "Request Id"},
+        "word": {"type": "string", "title": "Word"},
+        "word_index": {"type": "integer", "minimum": 1, "title": "Word Index"},
+        "is_final": {"type": "boolean", "default": false, "title": "Is Final"}
+      },
+      "required": ["request_id", "word", "word_index"]
+    },
+    "ObserveResponse": {
+      "type": "object",
+      "title": "ObserveResponse",
+      "properties": {
+        "commit": {
+          "type": ["string", "null"],
+          "default": null,
+          "title": "Commit"
+        },
+        "committed_product": {
+          "anyOf": [{"$ref": "#/schemas/ProductSummary"}, {"type": "null"}],
+          "default": null
+        },
+        "top_candidates": {
+          "type": "array",
+          "items": {"$ref": "#/schemas/ProductSummary"},
+          "default": [],
+          "title": "Top Candidates"
+        },
+        "filters": {"$ref": "#/schemas/FilterState"},
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "title": "Confidence"
+        },
+        "searches_used": {"type": "integer", "title": "Searches Used"},
+        "searches_remaining": {"type": "integer", "title": "Searches Remaining"},
+        "reason": {"type": "string", "title": "Reason"}
+      },
+      "required": ["filters", "confidence", "searches_used", "searches_remaining", "reason"]
+    },
+    "FinishRequest": {
+      "type": "object",
+      "title": "FinishRequest",
+      "properties": {
+        "request_id": {"type": "string", "title": "Request Id"}
+      },
+      "required": ["request_id"]
+    },
+    "FinishResponse": {
+      "type": "object",
+      "title": "FinishResponse",
+      "properties": {
+        "product_id": {
+          "type": ["string", "null"],
+          "default": null,
+          "title": "Product Id"
+        },
+        "product": {
+          "anyOf": [{"$ref": "#/schemas/ProductSummary"}, {"type": "null"}],
+          "default": null
+        },
+        "filters": {"$ref": "#/schemas/FilterState"},
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "title": "Confidence"
+        },
+        "searches_used": {"type": "integer", "title": "Searches Used"}
+      },
+      "required": ["filters", "confidence", "searches_used"]
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "title": "ErrorResponse",
+      "properties": {
+        "error_code": {"type": "string", "title": "Error Code"},
+        "detail": {"type": "string", "title": "Detail"}
+      },
+      "required": ["error_code", "detail"]
+    }
+  }
+}
