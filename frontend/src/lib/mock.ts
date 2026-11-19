@@ -7,7 +7,6 @@ import type {
   FinishResponse,
   ProductSummary,
   FilterState,
-  FilterValue,
 } from "../types/api";
 
 export const MOCK_CATALOGUE: ProductSummary[] = [

@@ -29,7 +29,11 @@ export class AgentWebSocketClient {
   >();
   private messageQueue: WSFrameOut[] = [];
 
-  constructor(private url: string = `${WS_BASE_URL}/agent/stream`) {}
+  private url: string;
+
+  constructor(url: string = `${WS_BASE_URL}/agent/stream`) {
+    this.url = url;
+  }
 
   connect(): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {

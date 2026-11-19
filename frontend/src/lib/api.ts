@@ -13,13 +13,20 @@ import type {
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 class ApiError extends Error {
+  status: number;
+  error_code: string;
+  detail: string;
+
   constructor(
-    public status: number,
-    public error_code: string,
-    public detail: string,
+    status: number,
+    error_code: string,
+    detail: string,
   ) {
     super(`[${status}] ${error_code}: ${detail}`);
     this.name = "ApiError";
+    this.status = status;
+    this.error_code = error_code;
+    this.detail = detail;
   }
 }
 

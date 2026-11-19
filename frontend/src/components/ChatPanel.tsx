@@ -12,7 +12,6 @@ import { SampleSelector } from "./SampleSelector";
 import { ScoreCard } from "./ScoreCard";
 import { EventTimeline } from "./EventTimeline";
 import type { SampleQuery } from "../data/sampleQueries";
-import type { TransportMode } from "../types/api";
 
 interface ChatPanelProps {
   useMock?: boolean;
