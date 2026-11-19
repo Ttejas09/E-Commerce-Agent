@@ -80,6 +80,8 @@ HINDI_NUMBERS = {
 
 MULTI_WORD_CATEGORIES = [
     (['casual', 'shoes'], 'sneakers'),
+    (['formal', 'shoes'], 'sneakers'),
+    (['formal', 'shoe'], 'sneakers'),
     (['running', 'shoes'], 'running shoes'),
     (['running', 'sneakers'], 'running shoes'),
     (['running', 'shoe'], 'running shoes'),
@@ -92,6 +94,7 @@ MULTI_WORD_CATEGORIES = [
     (['hooded', 'sweatshirt'], 'hoodies'),
     (['pair', 'of', 'jeans'], 'jeans'),
     (['wrist', 'watch'], 'watches'),
+    (['wrist', 'accessory'], 'watches'),
     (['t', 'shirt'], 't-shirts'),
     (['t', 'shirts'], 't-shirts'),
     (['bag', 'pack'], 'backpacks'),
@@ -101,10 +104,10 @@ MULTI_WORD_CATEGORIES = [
 ]
 
 SINGLE_WORD_CATEGORIES = {
-    'sneakers': 'sneakers', 'sneaker': 'sneakers', 'kicks': 'sneakers', 'trainers': 'sneakers', 'trainer': 'sneakers', 'loafers': 'sneakers', 'cleats': 'running shoes',
+    'sneakers': 'sneakers', 'sneaker': 'sneakers', 'kicks': 'sneakers', 'trainers': 'sneakers', 'trainer': 'sneakers', 'loafers': 'sneakers', 'loafer': 'sneakers', 'cleats': 'running shoes',
     'sandals': 'sandals', 'sandal': 'sandals', 'slides': 'sandals', 'floaters': 'sandals', 'chappal': 'sandals', 'chappals': 'sandals', 'slippers': 'sandals', 'flip-flops': 'sandals', 'flipflops': 'sandals', 'sandels': 'sandals',
     'hoodies': 'hoodies', 'hoodie': 'hoodies', 'hoody': 'hoodies', 'sweatshirt': 'hoodies', 'sweatshirts': 'hoodies', 'pullover': 'hoodies',
-    'jackets': 'jackets', 'jacket': 'jackets', 'windbreaker': 'jackets', 'windbreakers': 'jackets', 'coat': 'jackets', 'blazer': 'jackets',
+    'jackets': 'jackets', 'jacket': 'jackets', 'windbreaker': 'jackets', 'windbreakers': 'jackets', 'coat': 'jackets', 'blazer': 'jackets', 'outerwear': 'jackets', 'outerwears': 'jackets',
     'jeans': 'jeans', 'jean': 'jeans', 'denims': 'jeans', 'denim': 'jeans', 'chinos': 'jeans',
     'kurtas': 'kurtas', 'kurta': 'kurtas', 'kurti': 'kurtas', 'kurties': 'kurtas',
     'dresses': 'dresses', 'dress': 'dresses',
@@ -298,12 +301,21 @@ def parse_price_phrase(tokens: List[str], i: int) -> Optional[Tuple[int, int]]:
         if i + 1 < n and tokens[i+1] in ('hundred', 'sau', 'so'):
             return (teens * 100, i + 2)
 
-    # Num thousand num hundred
+    # English fractions: "two and a half thousand" -> 2500
+    if i + 4 < n and tokens[i] in ENGLISH_NUMBERS and tokens[i+1:i+4] == ['and', 'a', 'half'] and tokens[i+4] in ('thousand', 'hazaar', 'hazar'):
+        return (int((ENGLISH_NUMBERS[tokens[i]] + 0.5) * 1000), i + 5)
+
+    # Num thousand num hundred (supports digit strings e.g. "4 hazaar" or word numbers "four hazaar")
     num1 = ENGLISH_NUMBERS.get(tokens[i]) or HINDI_NUMBERS.get(tokens[i])
+    if num1 is None and tokens[i].isdigit() and int(tokens[i]) < 200:
+        num1 = int(tokens[i])
+
     if num1 is not None and i + 1 < n and tokens[i+1] in ('thousand', 'hazaar', 'hazar'):
         val = num1 * 1000
         if i + 3 < n:
             num2 = ENGLISH_NUMBERS.get(tokens[i+2]) or HINDI_NUMBERS.get(tokens[i+2])
+            if num2 is None and tokens[i+2].isdigit() and int(tokens[i+2]) < 100:
+                num2 = int(tokens[i+2])
             if num2 is not None and tokens[i+3] in ('hundred', 'sau', 'so'):
                 return (val + num2 * 100, i + 4)
         return (val, i + 2)
@@ -379,6 +391,15 @@ class IncrementalExtractor:
                 or tokens[start_i - 2:start_i] == ['instead', 'of']
             ):
                 return True
+            # Support conjunctions: "except black or red", "neither black nor red"
+            if start_i > 1 and tokens[start_i - 1] in ('or', 'nor', 'and'):
+                for lookback in range(2, 5):
+                    if start_i - lookback >= 0:
+                        prev = tokens[start_i - lookback]
+                        if prev in NEGATION_WORDS or prev in ('other', 'instead'):
+                            return True
+                        if prev not in ('or', 'nor', 'and', 'either', 'neither') and prev not in COLOURS and prev not in BRANDS_LOWER:
+                            break
             return False
 
         def register_slot(slot_name: str, val: any, w_idx: int, prov: str, start_i: int):
@@ -492,8 +513,14 @@ class IncrementalExtractor:
 
                 # Check if preceding tokens specify min_price vs max_price
                 is_min = False
-                if i > 2 and tokens[i-3:i] in (['not', 'more', 'than'], ['no', 'more', 'than']):
+                if i > 2 and tokens[i-3:i] in (['not', 'more', 'than'], ['no', 'more', 'than'], ['not', 'above', 'than']):
                     is_min = False
+                elif i > 1 and tokens[i-2:i] in (['not', 'exceeding'], ['not', 'above'], ['no', 'more']):
+                    is_min = False
+                elif i > 2 and tokens[i-3:i] in (['not', 'less', 'than'], ['no', 'less', 'than'], ['not', 'under', 'than']):
+                    is_min = True
+                elif i > 1 and tokens[i-2:i] in (['not', 'less'], ['not', 'under'], ['not', 'below']):
+                    is_min = True
                 elif i > 1 and tokens[i-2:i] in (
                     ['more', 'than'], ['greater', 'than'], ['at', 'least'],
                     ['starting', 'from'], ['starting', 'at'],
@@ -504,6 +531,17 @@ class IncrementalExtractor:
                     is_min = True
                 elif i > 0 and tokens[i-1] in ('upar', 'zyada', 'jyada'):
                     is_min = True
+
+                # Check succeeding post-position tokens (e.g. "3500 se upar", "7000 se kam")
+                if end_idx < n:
+                    if end_idx + 1 < n and tokens[end_idx:end_idx+2] in (['se', 'upar'], ['se', 'zyada'], ['se', 'jyada']):
+                        is_min = True
+                    elif tokens[end_idx] in ('upar', 'zyada', 'jyada'):
+                        is_min = True
+                    elif end_idx + 1 < n and tokens[end_idx:end_idx+2] in (['se', 'kam'], ['se', 'niche']):
+                        is_min = False
+                    elif tokens[end_idx] in ('kam', 'niche', 'tak'):
+                        is_min = False
 
                 # Check for range syntax: "between 2000 and 5000" or "2000 to 5000"
                 is_range_start = (i > 0 and tokens[i-1] == 'between')

@@ -240,14 +240,21 @@ const CATEGORY_MAP: Record<string, string> = {
   kurti: "kurtas",
   jacket: "jackets",
   jackets: "jackets",
+  outerwear: "jackets",
   headphones: "headphones",
   headphone: "headphones",
+  watch: "watches",
+  watches: "watches",
+  accessory: "watches",
+  loafers: "sneakers",
+  loafer: "sneakers",
   shirt: "shirts",
   shirts: "shirts",
   tee: "t-shirts",
   tshirt: "t-shirts",
   "t-shirt": "t-shirts",
   shoes: "sneakers", // default shoes to sneakers or running shoes
+  shoe: "sneakers",
 };
 
 const COLOUR_MAP: Record<string, string> = {
