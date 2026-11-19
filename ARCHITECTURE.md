@@ -208,14 +208,52 @@ Development is split between Person A (Backend & Core Agent) and Person B (Front
 
 ---
 
+## ADR 008: Audio-First Robustness & Negative Constraint Routing
+
+### Context
+Real-world voice interactions introduce acoustic homophones (`"ate"` for `8`, `"for"` for `4`), Hinglish negation patterns (`"nahi"` for corrections vs `"not black"` for exclusions), and vocabulary shifts.
+
+### Decision
+1. **Acoustic Homophone Normalization:**
+   - Map numbers frequently transcribed homophonically by Web Speech ASR (`ate` $\rightarrow$ `8`, `too`/`to` $\rightarrow$ `2`) when appearing adjacent to size cues.
+2. **Negative Constraint Filtering:**
+   - Detect negation prepositions (`not`, `dont`, `except`, `without`) and route the negated value into `state.excluded` rather than active slots.
+   - Filter search results post-retrieval against `state.excluded` to prevent negative attributes from appearing.
+3. **Correction Signal Disambiguation:**
+   - Separate conversational negation markers like `"nahi"` into `CORRECTION_SIGNALS` so they trigger slot supersession rather than false negative exclusion.
+
+---
+
+## ADR 009: React 19 State Synchronization & Non-Exact Short Human Query Hardening
+
+### Context
+In real UI user testing, human inputs such as `"Sneaker under 3000"` or `"shoes under 2000"` yielded no results or blank candidate cards:
+1. **React 19 Asynchronous State Queue:** In React 19, `setState(updater)` inside async promise loops does not execute synchronously. The hook pattern `let currentState = null; setState(s => { currentState = s; return s; })` resulted in `currentState` remaining permanently `null`, immediately aborting every word transmission and leaving the UI frozen on `"No pick yet"`.
+2. **Residual Query Pollution:** Price prepositions (`under`, `below`), digits (`3000`), and singular category tokens leaked into `residual_tokens`, skewing search ranking.
+3. **Speculative Gate Starvation:** Strict 3-filter gating prevented `top_candidates` from showing candidate cards during observation of short 2-slot queries.
+4. **Vague Hypernyms:** Words like `"shoes"`, `"shoe"`, `"footwear"`, and `"pants"` lacked direct category mapping.
+
+### Decision
+1. **Ref-Based Synchronous State Machine:**
+   - In `frontend/src/hooks/useAgent.ts`, manage a synchronous `stateRef = useRef<AgentState>(INITIAL_AGENT_STATE)` as the single source of truth for promises, eliminating stale closures and asynchronous queue aborts.
+2. **Hypernym Normalization:**
+   - Map colloquial footwear hypernyms (`shoes`, `shoe`, `footwear` $\rightarrow$ `sneakers`) and bottom wear (`pants`, `pant` $\rightarrow$ `track pants`) into `SINGLE_WORD_CATEGORIES`.
+3. **Residual Query Hygiene:**
+   - Strip price operators (`under`, `below`, `budget`, `upto`, `around`), digits, size indicators, and known category/brand/colour keywords from `get_residual_query()`, preserving only authentic qualifiers (e.g. `"warm"`, `"winter"`, `"casual"`).
+4. **Live Observation Candidate Previews:**
+   - When speculative search has not fired yet but `num_filters >= 1`, stream non-budget-consuming preview matches from the catalogue to `top_candidates` in `observe()`, providing instant card feedback on every keystroke.
+
+---
+
 ## Verification & Out-of-Distribution Validation
 
-The system is validated by an automated test suite of 25 unit, OOD, and adversarial tests ([agent/tests/](file:///d:/E-Commerce-Agent/agent/tests/)):
+The system is validated by an automated test suite of 33 unit, OOD, v2 improvements, and adversarial tests ([agent/tests/](file:///d:/E-Commerce-Agent/agent/tests/)):
+- `test_v2_improvements.py`: Short 2-slot prompts (`"Sneaker under 3000"`), hypernym mapping (`"shoes"`, `"pants"`), descriptive residual extraction (`"warm jacket for winter"`), speech homophones, and negative constraints.
 - `test_adversarial.py`: 15 complex query patterns (negative constraints, double/triple corrections, conversational filler, non-standard word order, budget intervals, phonetic typos, Hindi phrasing).
 - `test_ood_generalization.py`: 7 tests covering unseen categories, colours, and synthetic external datasets.
 - `test_extractor.py`, `test_hinglish.py`, `test_corrections.py`, `test_confidence.py`, `test_integration.py`.
 
 ```bash
 python -m unittest discover -s agent/tests
-# Ran 25 tests in 0.037s - OK
+# Ran 33 tests in 0.049s - OK
 ```

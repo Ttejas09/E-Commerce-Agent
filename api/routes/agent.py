@@ -66,6 +66,40 @@ def _to_schema_filters(agent_state) -> SchemaFilterState:
     return schema_state
 
 
+def _resolve_top_candidates(session, as_model: bool = True):
+    """Retrieve top candidates from search results or preview matches without burning budget."""
+    candidates = []
+    if session.agent.search_ctrl.last_results:
+        for r in session.agent.search_ctrl.last_results[:3]:
+            pid = r.get("product_id")
+            if pid and pid in _CATALOGUE_PRODUCTS:
+                summary = _to_product_summary(_CATALOGUE_PRODUCTS[pid])
+                candidates.append(summary if as_model else summary.model_dump())
+    elif session.agent.extractor.state.num_filters() >= 1:
+        st = session.agent.extractor.state
+        preview_matches = []
+        for p in _CATALOGUE_PRODUCTS.values():
+            if st.category and p.get("category") != st.category.value:
+                continue
+            if st.colour and p.get("colour") != st.colour.value:
+                continue
+            if st.brand and p.get("brand") != st.brand.value:
+                continue
+            if st.size and str(p.get("size")) != str(st.size.value):
+                continue
+            if st.max_price and int(p.get("price", 0)) > int(st.max_price.value):
+                continue
+            if st.min_price and int(p.get("price", 0)) < int(st.min_price.value):
+                continue
+            preview_matches.append(p)
+            if len(preview_matches) >= 3:
+                break
+        for p in preview_matches:
+            summary = _to_product_summary(p)
+            candidates.append(summary if as_model else summary.model_dump())
+    return candidates
+
+
 @router.post("/start", response_model=StartResponse, responses={409: {"model": ErrorResponse}})
 async def start(req: StartRequest):
     """Create a new agent session for the given request_id."""
@@ -129,11 +163,7 @@ async def observe(req: ObserveRequest):
         if commit_id and commit_id in _CATALOGUE_PRODUCTS:
             committed_summary = _to_product_summary(_CATALOGUE_PRODUCTS[commit_id])
 
-        top_candidates = []
-        for r in session.agent.search_ctrl.last_results[:3]:
-            pid = r.get("product_id")
-            if pid and pid in _CATALOGUE_PRODUCTS:
-                top_candidates.append(_to_product_summary(_CATALOGUE_PRODUCTS[pid]))
+        top_candidates = _resolve_top_candidates(session, as_model=True)
 
         confidence = out.get("confidence", 0.5) if out else 0.5
         reason = "commit" if commit_id else "observing"
@@ -225,11 +255,7 @@ async def websocket_stream(websocket: WebSocket):
                 if commit_id and commit_id in _CATALOGUE_PRODUCTS:
                     committed_summary = _to_product_summary(_CATALOGUE_PRODUCTS[commit_id]).model_dump()
 
-                top_candidates = []
-                for r in session.agent.search_ctrl.last_results[:3]:
-                    pid = r.get("product_id")
-                    if pid and pid in _CATALOGUE_PRODUCTS:
-                        top_candidates.append(_to_product_summary(_CATALOGUE_PRODUCTS[pid]).model_dump())
+                top_candidates = _resolve_top_candidates(session, as_model=False)
 
                 resp = {
                     "commit": commit_id,

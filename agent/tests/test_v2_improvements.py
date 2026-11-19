@@ -91,6 +91,66 @@ class TestV2Enhancements(unittest.TestCase):
         # Exactly 1 search was used! Zero wasted searches!
         self.assertEqual(tools.searches, 1)
 
+    def test_short_query_sneaker_under_3000(self):
+        """Short 2-slot prompts ('Sneaker under 3000') must parse cleanly with zero residual pollution."""
+        extractor = IncrementalExtractor()
+        words = ["Sneaker", "under", "3000"]
+        for idx, w in enumerate(words, 1):
+            state = extractor.process_word(w, idx)
+        self.assertEqual(state.category.value, "sneakers")
+        self.assertEqual(state.max_price.value, 3000)
+        extractor.flush()
+        self.assertEqual(extractor.get_residual_query(), "")
+
+        # End-to-end agent check
+        tools = Tools()
+        agent = Agent(tools)
+        agent.start("test-sneaker-3000")
+        for w in words:
+            agent.observe(w)
+        final_id = agent.finish()
+        self.assertIsNotNone(final_id)
+        # Result must be a sneaker under 3000
+        p = [x for x in tools.search("", filters={"category": "sneakers", "max_price": 3000}) if x["product_id"] == final_id]
+        self.assertTrue(len(p) > 0)
+        self.assertLessEqual(p[0]["price"], 3000)
+
+    def test_hypernym_shoes_and_pants(self):
+        """Generic hypernyms ('shoes', 'shoe', 'pants') map correctly to catalogue categories."""
+        extractor = IncrementalExtractor()
+        words = ["shoes", "under", "2000"]
+        for idx, w in enumerate(words, 1):
+            state = extractor.process_word(w, idx)
+        self.assertEqual(state.category.value, "sneakers")
+        self.assertEqual(state.max_price.value, 2000)
+
+        extractor2 = IncrementalExtractor()
+        words2 = ["black", "pants", "under", "1500"]
+        for idx, w in enumerate(words2, 1):
+            state2 = extractor2.process_word(w, idx)
+        self.assertEqual(state2.category.value, "track pants")
+        self.assertEqual(state2.colour.value, "black")
+        self.assertEqual(state2.max_price.value, 1500)
+
+    def test_descriptive_residual_query(self):
+        """Descriptive qualifiers ('warm', 'winter') remain in residual query without junk tokens."""
+        extractor = IncrementalExtractor()
+        words = ["warm", "jacket", "for", "winter"]
+        for idx, w in enumerate(words, 1):
+            state = extractor.process_word(w, idx)
+        self.assertEqual(state.category.value, "jackets")
+        extractor.flush()
+        residual = extractor.get_residual_query()
+        self.assertEqual(residual, "warm winter")
+
+        tools = Tools()
+        agent = Agent(tools)
+        agent.start("test-warm-jacket")
+        for w in words:
+            agent.observe(w)
+        final_id = agent.finish()
+        self.assertEqual(final_id, "P0776")
+
 
 if __name__ == "__main__":
     unittest.main()

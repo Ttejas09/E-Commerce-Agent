@@ -118,6 +118,8 @@ SINGLE_WORD_CATEGORIES = {
     'tshirt': 't-shirts', 'tshirts': 't-shirts', 'tee': 't-shirts', 'tees': 't-shirts', 't-shirt': 't-shirts', 't-shirts': 't-shirts', 'polo': 't-shirts', 'polos': 't-shirts', 'top': 't-shirts',
     'runners': 'running shoes',
     'joota': 'sneakers', 'joote': 'sneakers', 'juta': 'sneakers', 'jute': 'sneakers',
+    'shoes': 'sneakers', 'shoe': 'sneakers', 'footwear': 'sneakers',
+    'pants': 'track pants', 'pant': 'track pants',
 }
 
 MULTI_WORD_BRANDS = [
@@ -642,15 +644,61 @@ class IncrementalExtractor:
     def get_residual_query(self) -> str:
         """Return non-filter, non-stopword tokens for descriptive search ranking."""
         tokens = self.tokens
-        filter_vals = {
-            str(getattr(self.state, s).value).lower()
-            for s in ('category', 'colour', 'brand', 'size', 'max_price')
-            if getattr(self.state, s) is not None
+        filter_tokens = set()
+        for s in ('category', 'colour', 'brand', 'size', 'max_price'):
+            fv = getattr(self.state, s)
+            if fv is not None:
+                val_str = str(fv.value).lower()
+                filter_tokens.add(val_str)
+                for part in val_str.split():
+                    filter_tokens.add(part)
+
+        price_operators = {
+            'under', 'below', 'less', 'within', 'above', 'more', 'than',
+            'max', 'min', 'budget', 'upto', 'up', 'around', 'approx', 'price',
+            'rupees', 'rs', 'inr', 'bucks', 'k', 'hazaar', 'hazar', 'thousand',
+            'hundred', 'sau', 'so', 'cost', 'worth'
         }
-        res_tokens = [
-            t for t in tokens
-            if t not in STOPWORDS and t not in filter_vals and t not in UNIVERSAL_CLOSURE_WORDS
-        ]
+
+        size_indicators = {
+            'size', 'uk', 'waist', 'number', 'no', 'inch', 'inches',
+            'small', 'medium', 'large', 'xs', 'xl', 'xxl', '2xl', 'xxs',
+            's', 'm', 'l'
+        }
+
+        category_keywords = set(CATEGORIES)
+        category_keywords.update(SINGLE_WORD_CATEGORIES.keys())
+        category_keywords.update(SINGLE_WORD_CATEGORIES.values())
+        for phrase, _ in MULTI_WORD_CATEGORIES:
+            category_keywords.update(phrase)
+
+        brand_keywords = set(BRANDS_LOWER.keys())
+        for phrase, _ in MULTI_WORD_BRANDS:
+            brand_keywords.update(phrase)
+
+        colour_keywords = set(COLOURS)
+        colour_keywords.update(COLOUR_MAP.keys())
+        for phrase, _ in COMPOUND_COLOURS:
+            colour_keywords.update(phrase)
+
+        res_tokens = []
+        for t in tokens:
+            if (
+                t in STOPWORDS
+                or t in UNIVERSAL_CLOSURE_WORDS
+                or t in CORRECTION_SIGNALS
+                or t in price_operators
+                or t in size_indicators
+                or t in filter_tokens
+                or t in category_keywords
+                or t in brand_keywords
+                or t in colour_keywords
+                or t in ALL_SIZES
+                or t.isdigit()
+            ):
+                continue
+            res_tokens.append(t)
+
         self.state.residual_tokens = res_tokens
         return " ".join(res_tokens)
 
