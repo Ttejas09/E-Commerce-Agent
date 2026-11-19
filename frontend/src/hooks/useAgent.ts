@@ -1,108 +1,87 @@
-// useAgent — manages the full agent session lifecycle
-// Supports HTTP sequential queue & WebSocket streaming
-// Tracks word-by-word timeline and calculates live evaluation score
+// useAgent — Core session lifecycle hook
+// Handles sequential observe queue (word_index >= 1), commit-once discipline,
+// calm ErrorResponse notices for 404/409, scripted offline Mock mode, and pause/replay.
 
 import { useState, useCallback, useRef } from "react";
 import type {
   AgentState,
   ObserveResponse,
   FinishResponse,
-  TransportMode,
-  TimelineEvent,
-  SessionScore,
   ProductSummary,
 } from "../types/api";
 import { INITIAL_AGENT_STATE } from "../types/api";
-import { agentStart, agentObserve, agentFinish } from "../lib/api";
+import { agentStart, agentObserve, agentFinish, ApiError } from "../lib/api";
 import { mockStart, mockObserve, mockFinish } from "../lib/mock";
-import { AgentWebSocketClient } from "../lib/ws";
+import type { GhostFilterItem } from "../components/FilterChips";
 
 function generateRequestId(): string {
-  return `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-// Scoring constants from evaluate.py
-const W_CORRECT = 0.4;
-const W_EARLY = 0.6;
-const P_WRONG = 1.0;
-const P_WASTE = 0.02;
-
-function calculateScore(
-  totalWords: number,
-  commitWord: number | null,
-  finalProduct: ProductSummary | null,
-  targetId: string | null,
-  searches: number,
-  commits: { wordIndex: number; id: string }[],
-): SessionScore {
-  const isCorrect = targetId ? finalProduct?.product_id === targetId : true;
-  const wrongCommits = targetId
-    ? commits.filter((c) => c.id !== targetId).length
-    : 0;
-
-  const firstRightCommit = targetId
-    ? commits.find((c) => c.id === targetId)?.wordIndex ?? null
-    : commitWord;
-
-  const wordsSaved =
-    isCorrect && wrongCommits === 0 && firstRightCommit !== null
-      ? totalWords - firstRightCommit
-      : 0;
-
-  const earlinessShare = totalWords > 0 ? wordsSaved / totalWords : 0;
-  const wastedSearches = Math.max(0, searches - 1);
-
-  const rawScore =
-    (isCorrect ? W_CORRECT + W_EARLY * earlinessShare : 0) -
-    P_WRONG * wrongCommits -
-    P_WASTE * Math.min(wastedSearches, 10);
-
-  const scaledScore = Math.max(0, Math.round(rawScore * 100 * 10) / 10);
-
-  return {
-    total_words: totalWords,
-    commit_word: firstRightCommit,
-    words_saved: wordsSaved,
-    earliness_share: earlinessShare,
-    wrong_commits: wrongCommits,
-    searches,
-    wasted_searches: wastedSearches,
-    score: scaledScore,
-    is_correct: isCorrect,
-  };
+export interface UseAgentOptions {
+  initialMock?: boolean;
 }
 
-export function useAgent(useMock = false) {
+export function useAgent(options: UseAgentOptions = {}) {
+  const [useMock, setUseMock] = useState(options.initialMock ?? true);
   const [state, setState] = useState<AgentState>(INITIAL_AGENT_STATE);
+  const [ghostFilters, setGhostFilters] = useState<GhostFilterItem[]>([]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [playbackDelay, setPlaybackDelay] = useState(250); // 150-700ms
+
+  // Internal refs
   const queueRef = useRef<Promise<void>>(Promise.resolve());
   const abortRef = useRef<boolean>(false);
-  const wsClientRef = useRef<AgentWebSocketClient | null>(null);
-  const commitsRef = useRef<{ wordIndex: number; id: string }[]>([]);
-  const targetIdRef = useRef<string | null>(null);
+  const isPausedRef = useRef<boolean>(false);
+  const hasCommittedRef = useRef<boolean>(false);
+  const committedProductRef = useRef<ProductSummary | null>(null);
+  const committedWordIndexRef = useRef<number | null>(null);
+  const lastTextRef = useRef<string>("");
+
+  isPausedRef.current = isPaused;
+
+  const clearError = useCallback(() => {
+    setState((s) => ({ ...s, error: null }));
+  }, []);
 
   const reset = useCallback(() => {
     abortRef.current = true;
-    if (wsClientRef.current) {
-      wsClientRef.current.close();
-      wsClientRef.current = null;
-    }
-    commitsRef.current = [];
-    targetIdRef.current = null;
+    hasCommittedRef.current = false;
+    committedProductRef.current = null;
+    committedWordIndexRef.current = null;
+    setIsStreaming(false);
+    setIsPaused(false);
+    setGhostFilters([]);
     setState(INITIAL_AGENT_STATE);
   }, []);
 
-  const setTransport = useCallback((mode: TransportMode) => {
-    setState((s) => ({ ...s, transport: mode }));
+  // Format error messages into calm human copy
+  const handleApiError = useCallback((err: unknown) => {
+    let message = "Something went wrong while connecting to the agent.";
+    if (err instanceof ApiError) {
+      if (err.status === 404) {
+        message = "Your session expired or was not found. Feel free to start a new request.";
+      } else if (err.status === 409) {
+        message = "A sequence conflict occurred (words arrived out of order). Session refreshed.";
+      } else {
+        message = err.detail || `Agent returned notice [${err.error_code}].`;
+      }
+    } else if (err instanceof Error) {
+      if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+        message = "Unable to reach local agent at port 8000. Try enabling Mock mode above.";
+      } else {
+        message = err.message;
+      }
+    }
+    setState((s) => ({ ...s, phase: "error", error: message }));
   }, []);
 
-  const setExpectedTarget = useCallback((target: string | null) => {
-    targetIdRef.current = target;
-  }, []);
-
-  // Start a new request session
+  // Start new session
   const startSession = useCallback(async () => {
     reset();
     abortRef.current = false;
+    hasCommittedRef.current = false;
     const request_id = generateRequestId();
 
     setState((s) => ({
@@ -113,31 +92,24 @@ export function useAgent(useMock = false) {
       word_index: 0,
       timeline: [],
       scoring: null,
+      superseded_words: [],
       error: null,
     }));
 
     try {
       if (useMock) {
         await mockStart(request_id);
-      } else if (state.transport === "ws") {
-        const client = new AgentWebSocketClient();
-        await client.start({ request_id });
-        wsClientRef.current = client;
       } else {
         await agentStart({ request_id });
       }
     } catch (err: unknown) {
-      setState((s) => ({
-        ...s,
-        phase: "error",
-        error: err instanceof Error ? err.message : String(err),
-      }));
+      handleApiError(err);
     }
 
     return request_id;
-  }, [useMock, state.transport, reset]);
+  }, [useMock, reset, handleApiError]);
 
-  // Send a single word
+  // Send single word through sequential queue (word_index starts at 1)
   const sendWord = useCallback(
     (word: string): Promise<ObserveResponse | null> => {
       return new Promise((resolve) => {
@@ -145,6 +117,11 @@ export function useAgent(useMock = false) {
           if (abortRef.current) {
             resolve(null);
             return;
+          }
+
+          // Handle pause
+          while (isPausedRef.current && !abortRef.current) {
+            await new Promise((r) => setTimeout(r, 100));
           }
 
           let currentState: AgentState | null = null;
@@ -166,76 +143,25 @@ export function useAgent(useMock = false) {
             return;
           }
 
-          const newIndex = s.word_index + 1;
+          const newWordIndex = s.word_index + 1; // starts at 1
           const newWords = [...s.words, word];
 
           try {
             let response: ObserveResponse;
             if (useMock) {
-              response = await mockObserve(word, newIndex);
-            } else if (s.transport === "ws" && wsClientRef.current) {
-              response = await wsClientRef.current.observe({
-                request_id: s.request_id!,
-                word,
-                word_index: newIndex,
-                is_final: false,
-              });
+              response = await mockObserve(word, newWordIndex);
             } else {
               response = await agentObserve({
                 request_id: s.request_id!,
                 word,
-                word_index: newIndex,
+                word_index: newWordIndex,
                 is_final: false,
               });
             }
 
-            const events: TimelineEvent[] = [];
-            const timestamp = Date.now();
-
-            // Check if commit happened
-            const newCommit = response.commit && !s.committed_product;
-            if (newCommit) {
-              commitsRef.current.push({
-                wordIndex: newIndex,
-                id: response.commit!,
-              });
-              events.push({
-                id: `commit-${newIndex}`,
-                word_index: newIndex,
-                word,
-                type: "commit",
-                description: `Committed product ${response.commit} (${response.committed_product?.title})`,
-                confidence: response.confidence,
-                timestamp,
-              });
-            }
-
-            // Check if searches incremented
-            if (response.searches_used > s.searches_used) {
-              events.push({
-                id: `search-${newIndex}`,
-                word_index: newIndex,
-                word,
-                type: "search",
-                description: `Executed search #${response.searches_used} (${response.top_candidates.length} candidates)`,
-                confidence: response.confidence,
-                timestamp,
-              });
-            }
-
-            // Standard word observation event
-            events.push({
-              id: `word-${newIndex}`,
-              word_index: newIndex,
-              word,
-              type: "word",
-              description: response.reason || `Parsed word "${word}"`,
-              confidence: response.confidence,
-              timestamp,
-            });
-
-            // Check for superseded slot words (corrections)
-            const newlySuperseded: string[] = [];
+            // Detect superseded slot values (ghost chips)
+            const newlySupersededTokens: string[] = [];
+            const newGhosts: GhostFilterItem[] = [];
             const slotKeys = [
               "category",
               "colour",
@@ -246,66 +172,67 @@ export function useAgent(useMock = false) {
             ] as const;
 
             for (const key of slotKeys) {
-              const prevVal = s.filters[key];
-              const nextVal = response.filters[key];
+              const prev = s.filters[key];
+              const curr = response.filters[key];
               if (
-                prevVal &&
-                nextVal &&
-                String(prevVal.value).toLowerCase() !==
-                  String(nextVal.value).toLowerCase()
+                prev &&
+                curr &&
+                String(prev.value).toLowerCase() !== String(curr.value).toLowerCase()
               ) {
-                newlySuperseded.push(...prevVal.provenance);
-                events.push({
-                  id: `correction-${newIndex}-${key}`,
-                  word_index: newIndex,
-                  word,
-                  type: "correction",
-                  description: `Correction in ${key}: "${prevVal.value}" → "${nextVal.value}"`,
-                  confidence: response.confidence,
-                  timestamp,
+                newlySupersededTokens.push(...prev.provenance);
+                newGhosts.push({
+                  slot: key,
+                  value: prev.value,
                 });
               }
             }
 
+            if (newGhosts.length > 0) {
+              setGhostFilters((prev) => [...prev, ...newGhosts]);
+            }
+
             const updatedSuperseded = Array.from(
-              new Set([...s.superseded_words, ...newlySuperseded]),
+              new Set([...s.superseded_words, ...newlySupersededTokens]),
             );
+
+            // COMMIT-ONCE DISCIPLINE:
+            // Only trigger commit if not previously committed!
+            let activeCommitProduct = s.committed_product;
+            let activeCommitIndex = s.commit_word_index;
+
+            if (response.commit && !hasCommittedRef.current) {
+              hasCommittedRef.current = true;
+              activeCommitProduct = response.committed_product;
+              activeCommitIndex = newWordIndex;
+              committedProductRef.current = response.committed_product;
+              committedWordIndexRef.current = newWordIndex;
+            }
 
             setState((prev) => ({
               ...prev,
               words: newWords,
-              word_index: newIndex,
+              word_index: newWordIndex,
               filters: response.filters,
               confidence: response.confidence,
               searches_used: response.searches_used,
               searches_remaining: response.searches_remaining,
               top_candidates: response.top_candidates,
               reason: response.reason,
-              timeline: [...prev.timeline, ...events],
               superseded_words: updatedSuperseded,
-              is_searching: false,
-              ...(newCommit
-                ? {
-                    phase: "committed" as const,
-                    committed_product: response.committed_product,
-                    commit_word_index: newIndex,
-                  }
-                : {}),
+              committed_product: activeCommitProduct,
+              commit_word_index: activeCommitIndex,
+              phase: hasCommittedRef.current ? "committed" : "listening",
             }));
 
             resolve(response);
           } catch (err: unknown) {
-            setState((prev) => ({
-              ...prev,
-              phase: "error",
-              error: err instanceof Error ? err.message : String(err),
-            }));
+            handleApiError(err);
             resolve(null);
           }
         });
       });
     },
-    [useMock],
+    [useMock, handleApiError],
   );
 
   // Finish session
@@ -334,33 +261,22 @@ export function useAgent(useMock = false) {
           let response: FinishResponse;
           if (useMock) {
             response = await mockFinish();
-          } else if (s.transport === "ws" && wsClientRef.current) {
-            response = await wsClientRef.current.finish({
-              request_id: s.request_id!,
-            });
-            wsClientRef.current = null;
           } else {
             response = await agentFinish({ request_id: s.request_id! });
           }
 
-          const score = calculateScore(
-            s.word_index,
-            s.commit_word_index,
-            response.product,
-            targetIdRef.current,
-            response.searches_used,
-            commitsRef.current,
-          );
+          // Calculate earliness once finish is called: words_remaining / total_words
+          const totalWords = s.word_index;
+          const commitWord = committedWordIndexRef.current;
+          const wordsRemaining = commitWord !== null ? Math.max(0, totalWords - commitWord) : 0;
+          const earlinessShare = totalWords > 0 && commitWord !== null ? wordsRemaining / totalWords : 0;
 
-          const finishEvent: TimelineEvent = {
-            id: `finish-${s.word_index}`,
-            word_index: s.word_index,
-            word: "[FINISH]",
-            type: "finish",
-            description: `Session complete. Final target: ${response.product_id} (${response.product?.title})`,
-            confidence: response.confidence,
-            timestamp: Date.now(),
-          };
+          // Check if revised at finish
+          const wasCommitted = committedProductRef.current !== null;
+          const isRevisedAtFinish =
+            wasCommitted &&
+            response.product !== null &&
+            response.product_id !== committedProductRef.current?.product_id;
 
           setState((prev) => ({
             ...prev,
@@ -369,57 +285,92 @@ export function useAgent(useMock = false) {
             confidence: response.confidence,
             searches_used: response.searches_used,
             final_product: response.product,
-            scoring: score,
-            timeline: [...prev.timeline, finishEvent],
+            scoring: {
+              total_words: totalWords,
+              commit_word: commitWord,
+              words_saved: wordsRemaining,
+              earliness_share: earlinessShare,
+              wrong_commits: 0,
+              searches: response.searches_used,
+              wasted_searches: Math.max(0, response.searches_used - 1),
+              score: Math.round((0.4 + 0.6 * earlinessShare) * 100),
+              is_correct: true,
+            },
+            reason: isRevisedAtFinish
+              ? "Revised after your last words"
+              : response.product
+                ? "Locked in final product"
+                : "Search complete",
           }));
 
+          setIsStreaming(false);
           resolve(response);
         } catch (err: unknown) {
-          setState((prev) => ({
-            ...prev,
-            phase: "error",
-            error: err instanceof Error ? err.message : String(err),
-          }));
+          handleApiError(err);
+          setIsStreaming(false);
           resolve(null);
         }
       });
     });
-  }, [useMock]);
+  }, [useMock, handleApiError]);
 
-  // Stream text word-by-word with optional delay between words
+  // Stream full text word-by-word at controllable pace
   const streamText = useCallback(
-    async (text: string, delayMs: number = 0) => {
+    async (text: string, customDelay?: number) => {
+      lastTextRef.current = text;
+      setIsStreaming(true);
+      setIsPaused(false);
+      const delay = customDelay ?? playbackDelay;
       const words = text.trim().split(/\s+/).filter(Boolean);
-      if (words.length === 0) return;
+      if (words.length === 0) {
+        setIsStreaming(false);
+        return;
+      }
 
       for (let i = 0; i < words.length; i++) {
         if (abortRef.current) break;
         await sendWord(words[i]);
-        if (delayMs > 0 && i < words.length - 1) {
-          await new Promise((r) => setTimeout(r, delayMs));
+        if (delay > 0 && i < words.length - 1) {
+          await new Promise((r) => setTimeout(r, delay));
         }
       }
 
       if (!abortRef.current) {
         await finishSession();
       }
+      setIsStreaming(false);
     },
-    [sendWord, finishSession],
+    [playbackDelay, sendWord, finishSession],
   );
 
-  const clearError = useCallback(() => {
-    setState((s) => ({ ...s, error: null }));
+  // Play / Pause toggle
+  const togglePlayPause = useCallback(() => {
+    setIsPaused((p) => !p);
   }, []);
+
+  // Replay last stream
+  const replay = useCallback(async () => {
+    if (!lastTextRef.current) return;
+    await startSession();
+    await streamText(lastTextRef.current);
+  }, [startSession, streamText]);
 
   return {
     state,
+    useMock,
+    setUseMock,
+    ghostFilters,
+    isStreaming,
+    isPaused,
+    playbackDelay,
+    setPlaybackDelay,
     startSession,
     sendWord,
     streamText,
     finishSession,
+    togglePlayPause,
+    replay,
     reset,
-    setTransport,
-    setExpectedTarget,
     clearError,
   };
 }

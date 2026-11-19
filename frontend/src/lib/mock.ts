@@ -20,6 +20,15 @@ export const MOCK_CATALOGUE: ProductSummary[] = [
     price: 3899,
   },
   {
+    product_id: "P0083",
+    title: "Loomsy Street Sneakers, White",
+    brand: "Loomsy",
+    category: "sneakers",
+    colour: "white",
+    size: "8",
+    price: 2899,
+  },
+  {
     product_id: "P0086",
     title: "Loomsy Suede 4 Sneakers, Navy",
     brand: "Loomsy",

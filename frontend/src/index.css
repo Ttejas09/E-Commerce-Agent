@@ -1,46 +1,77 @@
-/* Global base styles */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap');
+@import "tailwindcss";
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+@layer base {
+  :root {
+    --color-paper: #FBF7F0;
+    --color-card: #FFFDF8;
+    --color-ink: #1E1A16;
+    --color-mutedInk: #6B6157;
+    --color-hairline: #E8DFD0;
+    --color-terracotta: #D9532B;
+    --color-commitGreen: #2F7D5B;
+    --color-saffron: #E9A23B;
+    --color-warningRose: #C2415D;
+  }
+
+  .dark {
+    --color-paper: #161412;
+    --color-card: #1E1A16;
+    --color-ink: #FBF7F0;
+    --color-mutedInk: #A69B8D;
+    --color-hairline: #2E2822;
+    --color-terracotta: #E06A45;
+    --color-commitGreen: #48A37C;
+    --color-saffron: #F2B258;
+    --color-warningRose: #D95A75;
+  }
 }
 
-html {
-  font-size: 16px;
-  line-height: 1.5;
-  -webkit-text-size-adjust: 100%;
+@theme {
+  --color-paper: var(--color-paper);
+  --color-card: var(--color-card);
+  --color-ink: var(--color-ink);
+  --color-mutedInk: var(--color-mutedInk);
+  --color-hairline: var(--color-hairline);
+  --color-terracotta: var(--color-terracotta);
+  --color-commitGreen: var(--color-commitGreen);
+  --color-saffron: var(--color-saffron);
+  --color-warningRose: var(--color-warningRose);
+
+  --font-serif: "Fraunces", "Instrument Serif", Georgia, serif;
+  --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
 body {
   margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #09090b;
-  color: #f4f4f5;
+  font-family: var(--font-sans);
+  background-color: var(--color-paper);
+  color: var(--color-ink);
   min-height: 100vh;
+  /* Subtle warm paper grain texture */
+  background-image: radial-gradient(rgba(30, 26, 22, 0.02) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
-#root {
-  min-height: 100vh;
+.dark body {
+  background-image: radial-gradient(rgba(251, 247, 240, 0.02) 1px, transparent 1px);
 }
 
-a {
-  color: #818cf8;
-  text-decoration: none;
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-a:hover {
-  text-decoration: underline;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-/* Remove default button styles */
-button {
-  font-family: inherit;
+::-webkit-scrollbar-thumb {
+  background: var(--color-hairline);
+  border-radius: 9999px;
 }
 
-/* Selection */
-::selection {
-  background: rgba(99, 102, 241, 0.3);
-  color: #f1f5f9;
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-mutedInk);
 }
