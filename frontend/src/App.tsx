@@ -1,7 +1,7 @@
 // App.tsx — "Warm Editorial, Human-Made" 3-Zone Anticipatory Commerce Interface
 // Zone 1: "The Request" | Zone 2: "What I Understood" | Zone 3: "The Pick"
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useAgent } from "./hooks/useAgent";
 import { useVoice } from "./hooks/useVoice";
 import { TopBar } from "./components/TopBar";
@@ -91,17 +91,55 @@ function App() {
     await streamText(sample.text);
   };
 
+  // Live typing handler for instant search-as-you-type
+  const liveSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleLiveInputChange = useCallback(
+    (text: string) => {
+      if (isStreaming) return;
+      if (liveSyncTimeoutRef.current) clearTimeout(liveSyncTimeoutRef.current);
+
+      liveSyncTimeoutRef.current = setTimeout(async () => {
+        const trimmed = text.trim();
+        if (!trimmed) {
+          if (state.phase !== "idle") reset();
+          return;
+        }
+
+        const words = trimmed.split(/\s+/).filter(Boolean);
+        if (words.length === 0) return;
+
+        // Reset and fast-stream all words sequentially to live update filters & candidates
+        await startSession();
+        for (const w of words) {
+          await sendWord(w);
+        }
+      }, 100);
+    },
+    [isStreaming, state.phase, startSession, sendWord, reset],
+  );
+
   // Typed query submit
   const handleSubmitText = async (text: string) => {
     if (isStreaming) return;
-    if (
-      state.phase === "idle" ||
-      state.phase === "finished" ||
-      state.phase === "error"
-    ) {
-      await startSession();
+    if (liveSyncTimeoutRef.current) clearTimeout(liveSyncTimeoutRef.current);
+
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const words = trimmed.split(/\s+/).filter(Boolean);
+
+    // If session is already listening and words match, simply finish!
+    if (state.phase === "listening" || state.phase === "committed") {
+      await finishSession();
+      return;
     }
-    await streamText(text);
+
+    // Otherwise, fast session start, deliver words, and finish
+    await startSession();
+    for (const w of words) {
+      await sendWord(w);
+    }
+    await finishSession();
   };
 
   const handleToggleVoice = async () => {
@@ -156,6 +194,7 @@ function App() {
             onTogglePlayPause={togglePlayPause}
             onReplay={replay}
             onSubmitText={handleSubmitText}
+            onInputChange={handleLiveInputChange}
             onToggleVoice={handleToggleVoice}
             onSelectSample={handleSelectSample}
           />

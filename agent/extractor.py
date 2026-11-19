@@ -489,7 +489,38 @@ class IncrementalExtractor:
             p_res = parse_price_phrase(tokens, i)
             if p_res:
                 val, end_idx = p_res
-                register_slot('max_price', val, i + 1, "price", i)
+
+                # Check if preceding tokens specify min_price vs max_price
+                is_min = False
+                if i > 2 and tokens[i-3:i] in (['not', 'more', 'than'], ['no', 'more', 'than']):
+                    is_min = False
+                elif i > 1 and tokens[i-2:i] in (
+                    ['more', 'than'], ['greater', 'than'], ['at', 'least'],
+                    ['starting', 'from'], ['starting', 'at'],
+                    ['se', 'upar'], ['se', 'zyada'], ['se', 'jyada']
+                ):
+                    is_min = True
+                elif i > 0 and tokens[i-1] in ('above', 'over', 'min', 'minimum'):
+                    is_min = True
+                elif i > 0 and tokens[i-1] in ('upar', 'zyada', 'jyada'):
+                    is_min = True
+
+                # Check for range syntax: "between 2000 and 5000" or "2000 to 5000"
+                is_range_start = (i > 0 and tokens[i-1] == 'between')
+                has_range_sep = (end_idx < n and tokens[end_idx] in ('and', 'to', '-'))
+
+                if (is_range_start or has_range_sep) and end_idx < n:
+                    sep_offset = 1 if has_range_sep else 0
+                    p_res2 = parse_price_phrase(tokens, end_idx + sep_offset)
+                    if p_res2:
+                        val2, end_idx2 = p_res2
+                        register_slot('min_price', min(val, val2), i + 1, "price_range_min", i)
+                        register_slot('max_price', max(val, val2), end_idx + sep_offset + 1, "price_range_max", end_idx + sep_offset)
+                        i = end_idx2
+                        continue
+
+                slot_name = 'min_price' if is_min else 'max_price'
+                register_slot(slot_name, val, i + 1, "price", i)
                 i = end_idx
                 continue
 
@@ -583,7 +614,7 @@ class IncrementalExtractor:
                 slots_found['category'] = (inferred_cat, slots_found['brand'][1], "inferred_from_brand")
 
         # Update FilterState
-        for slot in ('category', 'colour', 'brand', 'size', 'max_price'):
+        for slot in ('category', 'colour', 'brand', 'size', 'max_price', 'min_price'):
             if slot in slots_found:
                 val, w_idx, prov = slots_found[slot]
                 current_fv = getattr(self.state, slot)
@@ -645,7 +676,7 @@ class IncrementalExtractor:
         """Return non-filter, non-stopword tokens for descriptive search ranking."""
         tokens = self.tokens
         filter_tokens = set()
-        for s in ('category', 'colour', 'brand', 'size', 'max_price'):
+        for s in ('category', 'colour', 'brand', 'size', 'max_price', 'min_price'):
             fv = getattr(self.state, s)
             if fv is not None:
                 val_str = str(fv.value).lower()

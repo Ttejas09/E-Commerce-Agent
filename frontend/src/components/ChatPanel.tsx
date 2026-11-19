@@ -24,6 +24,7 @@ interface ChatPanelProps {
   onTogglePlayPause: () => void;
   onReplay: () => void;
   onSubmitText: (text: string) => void;
+  onInputChange?: (text: string) => void;
   onToggleVoice: () => void;
   onSelectSample: (sample: SampleRequest) => void;
 }
@@ -42,11 +43,18 @@ export function ChatPanel({
   onTogglePlayPause,
   onReplay,
   onSubmitText,
+  onInputChange,
   onToggleVoice,
   onSelectSample,
 }: ChatPanelProps) {
   const [inputText, setInputText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputText(val);
+    onInputChange?.(val);
+  };
 
   // Map words to filter slots for soft highlights
   const slotMap = new Map<string, string>();
@@ -213,8 +221,8 @@ export function ChatPanel({
             ref={inputRef}
             type="text"
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="Type your shopping request..."
+            onChange={handleInputChange}
+            placeholder="Type your shopping request (live search active)..."
             disabled={isStreaming}
             className="flex-1 h-11 px-4 rounded-xl border border-hairline bg-card text-ink placeholder:text-mutedInk/60 text-sm focus:outline-none focus:ring-2 focus:ring-terracotta"
           />

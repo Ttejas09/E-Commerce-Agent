@@ -394,9 +394,11 @@ export async function mockObserve(
 
   // 6. Price / Budget check
   const numClean = clean.replace(/[₹,]/g, "");
+  const isMinPrice = ["above", "over", "min", "minimum"].includes(prevClean);
   if (/^\d{3,5}$/.test(numClean) && !isNumericSize) {
     const priceVal = parseInt(numClean, 10);
-    currentFilters.max_price = {
+    const targetSlot = isMinPrice ? "min_price" : "max_price";
+    currentFilters[targetSlot] = {
       value: priceVal,
       confidence: 0.92,
       word_index,
@@ -413,7 +415,8 @@ export async function mockObserve(
     else if (windowStr.includes("saadhe teen hazaar")) computedPrice = 3500;
 
     if (computedPrice) {
-      currentFilters.max_price = {
+      const targetSlot = isMinPrice ? "min_price" : "max_price";
+      currentFilters[targetSlot] = {
         value: computedPrice,
         confidence: 0.96,
         word_index,
@@ -422,7 +425,8 @@ export async function mockObserve(
       updated = true;
     }
   } else if (clean === "0.8k") {
-    currentFilters.max_price = {
+    const targetSlot = isMinPrice ? "min_price" : "max_price";
+    currentFilters[targetSlot] = {
       value: 800,
       confidence: 0.95,
       word_index,
@@ -445,13 +449,14 @@ export async function mockObserve(
     if (currentFilters.brand && p.brand !== currentFilters.brand.value) return false;
     if (currentFilters.size && p.size && p.size !== currentFilters.size.value) return false;
     if (currentFilters.max_price && p.price > Number(currentFilters.max_price.value)) return false;
+    if (currentFilters.min_price && p.price < Number(currentFilters.min_price.value)) return false;
     return true;
   });
 
   // Confidence computation
   let confidence = 0.2;
   let populatedCount = 0;
-  for (const k of ["category", "colour", "brand", "size", "max_price"] as const) {
+  for (const k of ["category", "colour", "brand", "size", "max_price", "min_price"] as const) {
     if (currentFilters[k] !== null) {
       populatedCount += 1;
       confidence += 0.16;
