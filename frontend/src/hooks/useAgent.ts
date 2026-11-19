@@ -197,6 +197,7 @@ export function useAgent(options: UseAgentOptions = {}) {
           const currentWordIndex = currentSession.wordIndex;
           currentSession.words.push(word);
           const currentWords = [...currentSession.words];
+          lastTextRef.current = currentWords.join(" ");
 
           try {
             let response: ObserveResponse;
@@ -317,6 +318,10 @@ export function useAgent(options: UseAgentOptions = {}) {
           const earlinessShare =
             totalWords > 0 ? wordsRemaining / totalWords : 0;
 
+          if (currentSession.words.length > 0) {
+            lastTextRef.current = currentSession.words.join(" ");
+          }
+
           const isRevisedAtFinish =
             wasCommitted &&
             response.product !== null &&
@@ -417,10 +422,17 @@ export function useAgent(options: UseAgentOptions = {}) {
 
   // Replay last query
   const replay = useCallback(async () => {
-    if (!lastTextRef.current || isStreaming) return;
+    if (isStreaming) return;
+    const textToReplay =
+      lastTextRef.current ||
+      state.words.join(" ") ||
+      sessionRef.current.words.join(" ");
+    if (!textToReplay.trim()) return;
+
+    lastTextRef.current = textToReplay.trim();
     await startSession();
-    await streamText(lastTextRef.current);
-  }, [isStreaming, startSession, streamText]);
+    await streamText(textToReplay.trim());
+  }, [isStreaming, state.words, startSession, streamText]);
 
   return {
     state,

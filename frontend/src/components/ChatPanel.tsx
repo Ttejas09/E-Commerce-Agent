@@ -149,41 +149,41 @@ export function ChatPanel({
     }
   }
 
-  // Handle typing: dispatch each word sequentially on space / delimiter for live anticipation!
+  // Handle typing: as user types a space, the word is removed from the input field and goes up!
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    setInputText(val);
 
-    // If input was cleared, reset count
-    if (!val.trim()) {
-      sentWordsCountRef.current = 0;
+    // As soon as space or delimiter is typed:
+    if (/\s+$/.test(val)) {
+      const trimmed = val.trim();
+      if (trimmed) {
+        const parts = trimmed.split(/\s+/).filter(Boolean);
+        for (const w of parts) {
+          if (onSendLiveWord) {
+            onSendLiveWord(w);
+          } else if (onSubmitText) {
+            onSubmitText(w);
+          }
+        }
+      }
+      // Word is removed from the input field immediately and goes up!
+      setInputText("");
       return;
     }
 
-    // When space/delimiter is entered, send any newly completed words
-    if (/\s+$/.test(val)) {
-      const allTokens = val.trim().split(/\s+/).filter(Boolean);
-      while (sentWordsCountRef.current < allTokens.length) {
-        const wordToSend = allTokens[sentWordsCountRef.current];
-        if (wordToSend && onSendLiveWord) {
-          onSendLiveWord(wordToSend);
-        }
-        sentWordsCountRef.current++;
-      }
-    }
+    setInputText(val);
   };
 
   const handleApplyPrediction = (predText: string) => {
     const parts = predText.trim().split(/\s+/).filter(Boolean);
-    if (onSendLiveWord) {
-      for (const w of parts) {
+    for (const w of parts) {
+      if (onSendLiveWord) {
         onSendLiveWord(w);
+      } else if (onSubmitText) {
+        onSubmitText(w);
       }
-    } else {
-      onSubmitText(predText);
     }
-    setInputText((prev) => (prev ? `${prev.trim()} ${predText} ` : `${predText} `));
-    sentWordsCountRef.current += parts.length;
+    setInputText("");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -198,14 +198,16 @@ export function ChatPanel({
 
     const trimmed = inputText.trim();
     if (trimmed) {
-      const allTokens = trimmed.split(/\s+/).filter(Boolean);
-      while (sentWordsCountRef.current < allTokens.length) {
-        const wordToSend = allTokens[sentWordsCountRef.current];
-        if (wordToSend && onSendLiveWord) {
-          onSendLiveWord(wordToSend);
+      const parts = trimmed.split(/\s+/).filter(Boolean);
+      for (const w of parts) {
+        if (onSendLiveWord) {
+          onSendLiveWord(w);
+        } else if (onSubmitText) {
+          onSubmitText(w);
         }
-        sentWordsCountRef.current++;
       }
+      // Word is removed from the input field immediately!
+      setInputText("");
     }
 
     if (onFinishSession) {
@@ -292,6 +294,11 @@ export function ChatPanel({
             {interimTranscript && (
               <span className="italic text-mutedInk opacity-60 font-serif">
                 {interimTranscript} ...
+              </span>
+            )}
+            {!isListening && inputText.trim() && (
+              <span className="italic text-mutedInk/60 font-serif">
+                {inputText.trim()}
               </span>
             )}
           </div>
