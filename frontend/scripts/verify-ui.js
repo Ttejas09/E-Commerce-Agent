@@ -1,6 +1,8 @@
 // Automated verification & screenshot script for Anticipatory Commerce UI
 import puppeteer from "puppeteer-core";
 import path from "path";
+import os from "os";
+import fs from "fs";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -16,15 +18,18 @@ async function sleep(ms) {
 
 async function run() {
   console.log("Launching headless Chrome...");
+  const tempProfile = fs.mkdtempSync(path.join(os.tmpdir(), "puppeteer-ui-"));
   const browser = await puppeteer.launch({
     executablePath: CHROME_PATH,
     headless: "new",
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu"],
+    userDataDir: tempProfile,
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--no-first-run"],
   });
 
   const page = await browser.newPage();
 
-  // 1. Desktop 1440x900 - Light Mode Idle
+  try {
+    // 1. Desktop 1440x900 - Light Mode Idle
   console.log("1. Testing Desktop 1440x900 Light Mode...");
   await page.setViewport({ width: 1440, height: 900 });
   await page.goto(URL, { waitUntil: "networkidle0" });
@@ -59,9 +64,9 @@ async function run() {
     });
   }
 
-  // Wait for streaming words to arrive and finish (approx 3.5s)
+  // Wait for streaming words to arrive and finish (approx 6-7s)
   console.log("Waiting for correction stream to complete...");
-  await sleep(4000);
+  await sleep(7000);
 
   await page.screenshot({
     path: path.join(SCREENSHOT_DIR, "2-desktop-1440-correction-light.png"),
@@ -94,7 +99,7 @@ async function run() {
     if (hinglishBtn) hinglishBtn.click();
   });
 
-  await sleep(4000);
+  await sleep(7500);
 
   await page.screenshot({
     path: path.join(SCREENSHOT_DIR, "4-desktop-1440-hinglish-dark.png"),
@@ -128,8 +133,13 @@ async function run() {
   });
   console.log("Captured: 6-mobile-390-light.png");
 
-  console.log("Verification complete! Closing browser.");
-  await browser.close();
+  } finally {
+    console.log("Verification complete! Closing browser.");
+    await browser.close().catch(() => {});
+    try {
+      fs.rmSync(tempProfile, { recursive: true, force: true });
+    } catch {}
+  }
 }
 
 run().catch((err) => {
