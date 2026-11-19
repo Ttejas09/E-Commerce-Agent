@@ -341,6 +341,11 @@ export function useAgent(options: UseAgentOptions = {}) {
     setIsPaused((p) => !p);
   }, []);
 
+  // Set last query string (so rewind/replay replays what user typed)
+  const setLastQuery = useCallback((text: string) => {
+    lastTextRef.current = text;
+  }, []);
+
   // Replay last stream
   const replay = useCallback(async () => {
     if (!lastTextRef.current) return;
@@ -363,6 +368,7 @@ export function useAgent(options: UseAgentOptions = {}) {
     finishSession,
     togglePlayPause,
     replay,
+    setLastQuery,
     reset,
     clearError,
   };

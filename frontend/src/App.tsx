@@ -42,6 +42,7 @@ function App() {
     finishSession,
     togglePlayPause,
     replay,
+    setLastQuery,
     reset,
     clearError,
   } = useAgent({ initialMock: false });
@@ -96,6 +97,7 @@ function App() {
 
   const handleLiveInputChange = useCallback(
     (text: string) => {
+      setLastQuery(text);
       if (isStreaming) return;
       if (liveSyncTimeoutRef.current) clearTimeout(liveSyncTimeoutRef.current);
 
@@ -116,11 +118,12 @@ function App() {
         }
       }, 100);
     },
-    [isStreaming, state.phase, startSession, sendWord, reset],
+    [isStreaming, state.phase, startSession, sendWord, reset, setLastQuery],
   );
 
   // Typed query submit
   const handleSubmitText = async (text: string) => {
+    setLastQuery(text);
     if (isStreaming) return;
     if (liveSyncTimeoutRef.current) clearTimeout(liveSyncTimeoutRef.current);
 
