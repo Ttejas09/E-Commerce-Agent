@@ -25,6 +25,11 @@ from agent.agent import Agent
 from evaluate import Tools
 from search import load_catalogue
 
+try:
+    from agent.models.model_registry import dense_semantic_search
+except (ImportError, ModuleNotFoundError):
+    dense_semantic_search = None
+
 router = APIRouter(prefix="/agent", tags=["agent"])
 _session_manager = SessionManager(ttl_seconds=600)
 
@@ -75,8 +80,34 @@ def _resolve_top_candidates(session, as_model: bool = True):
             if pid and pid in _CATALOGUE_PRODUCTS:
                 summary = _to_product_summary(_CATALOGUE_PRODUCTS[pid])
                 candidates.append(summary if as_model else summary.model_dump())
-    elif session.agent.extractor.state.num_filters() >= 1:
+    elif session.agent.extractor.state.num_filters() >= 1 or len(session.agent.extractor.raw_words) >= 1:
         st = session.agent.extractor.state
+        active_filters = {}
+        if st.category:
+            active_filters["category"] = st.category.value
+        if st.colour:
+            active_filters["colour"] = st.colour.value
+        if st.brand:
+            active_filters["brand"] = st.brand.value
+        if st.size:
+            active_filters["size"] = st.size.value
+        if st.max_price:
+            active_filters["max_price"] = st.max_price.value
+        if st.min_price:
+            active_filters["min_price"] = st.min_price.value
+
+        query = " ".join(session.agent.extractor.raw_words)
+        if dense_semantic_search:
+            try:
+                model_hits = dense_semantic_search(query, active_filters, k=3)
+                if model_hits:
+                    for p in model_hits:
+                        summary = _to_product_summary(p)
+                        candidates.append(summary if as_model else summary.model_dump())
+                    return candidates
+            except Exception:
+                pass
+
         preview_matches = []
         for p in _CATALOGUE_PRODUCTS.values():
             if st.category and p.get("category") != st.category.value:
