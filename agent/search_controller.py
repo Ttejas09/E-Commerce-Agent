@@ -48,17 +48,16 @@ class SearchController:
         if in_cooldown:
             return False
 
-        if state.num_filters() < 3 or state.category is None:
+        if state.category is None:
             return False
 
-        if not has_closure:
-            return False
+        if state.num_filters() >= 2 and has_closure:
+            sig = state.get_signature()
+            if sig in self.cache:
+                return False
+            return True
 
-        sig = state.get_signature()
-        if sig in self.cache:
-            return False
-
-        return True
+        return False
 
     def search(self, state: FilterState, residual_query: str = "") -> List[Dict[str, Any]]:
         """Run search with current filter state and residual query."""
@@ -119,10 +118,13 @@ class SearchController:
             if hits:
                 return hits
 
-        # Step 2: Relax max_price +15%
-        if "max_price" in filters:
+        # Step 2: Relax price constraints (max_price +15%, min_price -15%)
+        if "max_price" in filters or "min_price" in filters:
             relaxed_filters = dict(filters)
-            relaxed_filters["max_price"] = int(relaxed_filters["max_price"] * (1.0 + PRICE_AROUND_MARGIN))
+            if "max_price" in filters:
+                relaxed_filters["max_price"] = int(relaxed_filters["max_price"] * (1.0 + PRICE_AROUND_MARGIN))
+            if "min_price" in filters:
+                relaxed_filters["min_price"] = int(relaxed_filters["min_price"] * (1.0 - PRICE_AROUND_MARGIN))
             hits = _exec_search("", relaxed_filters)
             if hits:
                 return hits

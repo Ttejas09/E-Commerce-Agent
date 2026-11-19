@@ -22,41 +22,71 @@ export interface UseAgentOptions {
   initialMock?: boolean;
 }
 
+interface SessionInfo {
+  requestId: string | null;
+  phase: AgentState["phase"];
+  wordIndex: number;
+  words: string[];
+  filters: AgentState["filters"];
+  hasCommitted: boolean;
+  committedProduct: ProductSummary | null;
+  committedWordIndex: number | null;
+  supersededWords: string[];
+}
+
 export function useAgent(options: UseAgentOptions = {}) {
-  const [useMock, setUseMock] = useState(options.initialMock ?? false);
+  const envMock = import.meta.env.VITE_USE_MOCK !== undefined
+    ? import.meta.env.VITE_USE_MOCK === "true"
+    : false;
+  const [useMock, setUseMock] = useState(options.initialMock ?? envMock);
   const [state, setState] = useState<AgentState>(INITIAL_AGENT_STATE);
   const [ghostFilters, setGhostFilters] = useState<GhostFilterItem[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [playbackDelay, setPlaybackDelay] = useState(250); // 150-700ms
 
-  // Internal refs
-  const stateRef = useRef<AgentState>(INITIAL_AGENT_STATE);
-  stateRef.current = state;
+  // Synchronous session ref to guarantee strict ordering (word_index 1, 2, 3...)
+  // and prevent React async batching race conditions.
+  const sessionRef = useRef<SessionInfo>({
+    requestId: null,
+    phase: "idle",
+    wordIndex: 0,
+    words: [],
+    filters: INITIAL_AGENT_STATE.filters,
+    hasCommitted: false,
+    committedProduct: null,
+    committedWordIndex: null,
+    supersededWords: [],
+  });
+
   const queueRef = useRef<Promise<void>>(Promise.resolve());
   const abortRef = useRef<boolean>(false);
   const isPausedRef = useRef<boolean>(false);
-  const hasCommittedRef = useRef<boolean>(false);
-  const committedProductRef = useRef<ProductSummary | null>(null);
-  const committedWordIndexRef = useRef<number | null>(null);
   const lastTextRef = useRef<string>("");
 
   isPausedRef.current = isPaused;
 
   const clearError = useCallback(() => {
-    stateRef.current = { ...stateRef.current, error: null };
     setState((s) => ({ ...s, error: null }));
   }, []);
 
   const reset = useCallback(() => {
     abortRef.current = true;
-    hasCommittedRef.current = false;
-    committedProductRef.current = null;
-    committedWordIndexRef.current = null;
+    queueRef.current = Promise.resolve();
+    sessionRef.current = {
+      requestId: null,
+      phase: "idle",
+      wordIndex: 0,
+      words: [],
+      filters: INITIAL_AGENT_STATE.filters,
+      hasCommitted: false,
+      committedProduct: null,
+      committedWordIndex: null,
+      supersededWords: [],
+    };
     setIsStreaming(false);
     setIsPaused(false);
     setGhostFilters([]);
-    stateRef.current = INITIAL_AGENT_STATE;
     setState(INITIAL_AGENT_STATE);
   }, []);
 
@@ -78,30 +108,51 @@ export function useAgent(options: UseAgentOptions = {}) {
         message = err.message;
       }
     }
-    stateRef.current = { ...stateRef.current, phase: "error", error: message };
+    sessionRef.current.phase = "error";
     setState((s) => ({ ...s, phase: "error", error: message }));
   }, []);
 
   // Start new session
   const startSession = useCallback(async () => {
-    reset();
     abortRef.current = false;
-    hasCommittedRef.current = false;
+    queueRef.current = Promise.resolve();
     const request_id = generateRequestId();
 
-    const nextState: AgentState = {
-      ...INITIAL_AGENT_STATE,
+    sessionRef.current = {
+      requestId: request_id,
+      phase: "listening",
+      wordIndex: 0,
+      words: [],
+      filters: INITIAL_AGENT_STATE.filters,
+      hasCommitted: false,
+      committedProduct: null,
+      committedWordIndex: null,
+      supersededWords: [],
+    };
+
+    setIsStreaming(false);
+    setIsPaused(false);
+    setGhostFilters([]);
+    setState((s) => ({
+      ...s,
       phase: "listening",
       request_id,
       words: [],
       word_index: 0,
+      filters: INITIAL_AGENT_STATE.filters,
+      confidence: 0,
+      searches_used: 0,
+      searches_remaining: 4,
+      committed_product: null,
+      commit_word_index: null,
+      final_product: null,
+      top_candidates: [],
+      reason: "Listening...",
       timeline: [],
       scoring: null,
       superseded_words: [],
       error: null,
-    };
-    stateRef.current = nextState;
-    setState(nextState);
+    }));
 
     try {
       if (useMock) {
@@ -114,7 +165,7 @@ export function useAgent(options: UseAgentOptions = {}) {
     }
 
     return request_id;
-  }, [useMock, reset, handleApiError]);
+  }, [useMock, handleApiError]);
 
   // Send single word through sequential queue (word_index starts at 1)
   const sendWord = useCallback(
@@ -131,27 +182,31 @@ export function useAgent(options: UseAgentOptions = {}) {
             await new Promise((r) => setTimeout(r, 100));
           }
 
-          const s = stateRef.current;
+          const currentSession = sessionRef.current;
           if (
-            (s.phase !== "listening" && s.phase !== "committed") ||
-            !s.request_id
+            !currentSession.requestId ||
+            currentSession.phase === "finished" ||
+            currentSession.phase === "error"
           ) {
             resolve(null);
             return;
           }
 
-          const newWordIndex = s.word_index + 1; // starts at 1
-          const newWords = [...s.words, word];
+          // Strictly sequential wordIndex increment
+          currentSession.wordIndex += 1;
+          const currentWordIndex = currentSession.wordIndex;
+          currentSession.words.push(word);
+          const currentWords = [...currentSession.words];
 
           try {
             let response: ObserveResponse;
             if (useMock) {
-              response = await mockObserve(word, newWordIndex);
+              response = await mockObserve(word, currentWordIndex);
             } else {
               response = await agentObserve({
-                request_id: s.request_id!,
+                request_id: currentSession.requestId,
                 word,
-                word_index: newWordIndex,
+                word_index: currentWordIndex,
                 is_final: false,
               });
             }
@@ -169,7 +224,7 @@ export function useAgent(options: UseAgentOptions = {}) {
             ] as const;
 
             for (const key of slotKeys) {
-              const prev = s.filters[key];
+              const prev = currentSession.filters[key];
               const curr = response.filters[key];
               if (
                 prev &&
@@ -189,26 +244,23 @@ export function useAgent(options: UseAgentOptions = {}) {
             }
 
             const updatedSuperseded = Array.from(
-              new Set([...s.superseded_words, ...newlySupersededTokens]),
+              new Set([...currentSession.supersededWords, ...newlySupersededTokens]),
             );
+            currentSession.supersededWords = updatedSuperseded;
+            currentSession.filters = response.filters;
 
             // COMMIT-ONCE DISCIPLINE:
-            // Only trigger commit if not previously committed!
-            let activeCommitProduct = s.committed_product;
-            let activeCommitIndex = s.commit_word_index;
-
-            if (response.commit && !hasCommittedRef.current) {
-              hasCommittedRef.current = true;
-              activeCommitProduct = response.committed_product;
-              activeCommitIndex = newWordIndex;
-              committedProductRef.current = response.committed_product;
-              committedWordIndexRef.current = newWordIndex;
+            if (response.commit && !currentSession.hasCommitted) {
+              currentSession.hasCommitted = true;
+              currentSession.committedProduct = response.committed_product;
+              currentSession.committedWordIndex = currentWordIndex;
+              currentSession.phase = "committed";
             }
 
-            const nextState: AgentState = {
-              ...s,
-              words: newWords,
-              word_index: newWordIndex,
+            setState((prev) => ({
+              ...prev,
+              words: currentWords,
+              word_index: currentWordIndex,
               filters: response.filters,
               confidence: response.confidence,
               searches_used: response.searches_used,
@@ -216,12 +268,10 @@ export function useAgent(options: UseAgentOptions = {}) {
               top_candidates: response.top_candidates,
               reason: response.reason,
               superseded_words: updatedSuperseded,
-              committed_product: activeCommitProduct,
-              commit_word_index: activeCommitIndex,
-              phase: hasCommittedRef.current ? "committed" : "listening",
-            };
-            stateRef.current = nextState;
-            setState(nextState);
+              committed_product: currentSession.committedProduct,
+              commit_word_index: currentSession.committedWordIndex,
+              phase: currentSession.hasCommitted ? "committed" : "listening",
+            }));
 
             resolve(response);
           } catch (err: unknown) {
@@ -238,39 +288,42 @@ export function useAgent(options: UseAgentOptions = {}) {
   const finishSession = useCallback(async (): Promise<FinishResponse | null> => {
     return new Promise((resolve) => {
       queueRef.current = queueRef.current.then(async () => {
-        const s = stateRef.current;
-        if (!s.request_id) {
+        const currentSession = sessionRef.current;
+        if (!currentSession.requestId || currentSession.phase === "finished") {
           resolve(null);
           return;
         }
-
-        const processingState: AgentState = { ...s, phase: "processing" };
-        stateRef.current = processingState;
-        setState(processingState);
 
         try {
           let response: FinishResponse;
           if (useMock) {
             response = await mockFinish();
           } else {
-            response = await agentFinish({ request_id: s.request_id });
+            response = await agentFinish({
+              request_id: currentSession.requestId,
+            });
           }
 
-          // Calculate earliness once finish is called: words_remaining / total_words
-          const totalWords = s.word_index;
-          const commitWord = committedWordIndexRef.current;
-          const wordsRemaining = commitWord !== null ? Math.max(0, totalWords - commitWord) : 0;
-          const earlinessShare = totalWords > 0 && commitWord !== null ? wordsRemaining / totalWords : 0;
+          currentSession.phase = "finished";
+          currentSession.filters = response.filters;
 
-          // Check if revised at finish
-          const wasCommitted = committedProductRef.current !== null;
+          const totalWords = currentSession.words.length;
+          const wasCommitted =
+            currentSession.hasCommitted && currentSession.committedWordIndex !== null;
+          const commitWord = wasCommitted
+            ? currentSession.committedWordIndex!
+            : totalWords;
+          const wordsRemaining = Math.max(0, totalWords - commitWord);
+          const earlinessShare =
+            totalWords > 0 ? wordsRemaining / totalWords : 0;
+
           const isRevisedAtFinish =
             wasCommitted &&
             response.product !== null &&
-            response.product_id !== committedProductRef.current?.product_id;
+            response.product_id !== currentSession.committedProduct?.product_id;
 
-          const finishedState: AgentState = {
-            ...s,
+          setState((prev) => ({
+            ...prev,
             phase: "finished",
             filters: response.filters,
             confidence: response.confidence,
@@ -292,9 +345,7 @@ export function useAgent(options: UseAgentOptions = {}) {
               : response.product
                 ? "Locked in final product"
                 : "Search complete",
-          };
-          stateRef.current = finishedState;
-          setState(finishedState);
+          }));
 
           setIsStreaming(false);
           resolve(response);
@@ -336,22 +387,40 @@ export function useAgent(options: UseAgentOptions = {}) {
     [playbackDelay, sendWord, finishSession],
   );
 
+  // Send a live word as typed or dictated in real time
+  const sendLiveWord = useCallback(
+    async (word: string) => {
+      const clean = word.trim();
+      if (!clean) return null;
+      const currentSession = sessionRef.current;
+      if (
+        !currentSession.requestId ||
+        currentSession.phase === "idle" ||
+        currentSession.phase === "finished" ||
+        currentSession.phase === "error"
+      ) {
+        await startSession();
+      }
+      return sendWord(clean);
+    },
+    [startSession, sendWord],
+  );
+
   // Play / Pause toggle
   const togglePlayPause = useCallback(() => {
-    setIsPaused((p) => !p);
+    setIsPaused((p) => {
+      const next = !p;
+      isPausedRef.current = next;
+      return next;
+    });
   }, []);
 
-  // Set last query string (so rewind/replay replays what user typed)
-  const setLastQuery = useCallback((text: string) => {
-    lastTextRef.current = text;
-  }, []);
-
-  // Replay last stream
+  // Replay last query
   const replay = useCallback(async () => {
-    if (!lastTextRef.current) return;
+    if (!lastTextRef.current || isStreaming) return;
     await startSession();
     await streamText(lastTextRef.current);
-  }, [startSession, streamText]);
+  }, [isStreaming, startSession, streamText]);
 
   return {
     state,
@@ -364,11 +433,11 @@ export function useAgent(options: UseAgentOptions = {}) {
     setPlaybackDelay,
     startSession,
     sendWord,
+    sendLiveWord,
     streamText,
     finishSession,
     togglePlayPause,
     replay,
-    setLastQuery,
     reset,
     clearError,
   };

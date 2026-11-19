@@ -75,7 +75,7 @@ class Agent:
                     has_brand=state.brand is not None,
                     has_size=state.size is not None,
                     has_colour=state.colour is not None,
-                    has_price=state.max_price is not None,
+                    has_price=(state.max_price is not None or state.min_price is not None),
                     word_index=self.word_index,
                     words_since_last_slot_change=self.extractor.words_since_last_slot_change,
                     correction_seen=self.extractor.correction_seen,

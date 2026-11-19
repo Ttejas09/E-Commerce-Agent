@@ -80,8 +80,6 @@ HINDI_NUMBERS = {
 
 MULTI_WORD_CATEGORIES = [
     (['casual', 'shoes'], 'sneakers'),
-    (['formal', 'shoes'], 'sneakers'),
-    (['formal', 'shoe'], 'sneakers'),
     (['running', 'shoes'], 'running shoes'),
     (['running', 'sneakers'], 'running shoes'),
     (['running', 'shoe'], 'running shoes'),
@@ -94,21 +92,83 @@ MULTI_WORD_CATEGORIES = [
     (['hooded', 'sweatshirt'], 'hoodies'),
     (['pair', 'of', 'jeans'], 'jeans'),
     (['wrist', 'watch'], 'watches'),
-    (['wrist', 'accessory'], 'watches'),
     (['t', 'shirt'], 't-shirts'),
     (['t', 'shirts'], 't-shirts'),
     (['bag', 'pack'], 'backpacks'),
     (['bag', 'packs'], 'backpacks'),
     (['flip', 'flops'], 'sandals'),
     (['ethnic', 'wear'], 'kurtas'),
+    (['polo', 't', 'shirt'], 't-shirts'),
+    (['polo', 't', 'shirts'], 't-shirts'),
+    (['polo', 'shirt'], 't-shirts'),
+    (['polo', 'tshirt'], 't-shirts'),
+    (['polo', 'tee'], 't-shirts'),
+    (['warm', 'jacket'], 'jackets'),
+    (['winter', 'jacket'], 'jackets'),
+    (['denim', 'jacket'], 'jackets'),
+    (['denim', 'jackets'], 'jackets'),
+    (['denim', 'shirt'], 'shirts'),
+    (['denim', 'shirts'], 'shirts'),
+    (['denim', 'jeans'], 'jeans'),
+    (['denim', 'pant'], 'jeans'),
+    (['denim', 'pants'], 'jeans'),
+    (['leather', 'jacket'], 'jackets'),
+    (['leather', 'jackets'], 'jackets'),
+    (['leather', 'wallet'], 'wallets'),
+    (['leather', 'wallets'], 'wallets'),
+    (['leather', 'shoes'], 'sneakers'),
+    (['bomber', 'jacket'], 'jackets'),
+    (['bomber', 'jackets'], 'jackets'),
+    (['puffer', 'jacket'], 'jackets'),
+    (['puffer', 'jackets'], 'jackets'),
+    (['quilted', 'jacket'], 'jackets'),
+    (['quilted', 'jackets'], 'jackets'),
+    (['fleece', 'hoodie'], 'hoodies'),
+    (['fleece', 'hoodies'], 'hoodies'),
+    (['corduroy', 'cap'], 'caps'),
+    (['corduroy', 'caps'], 'caps'),
+    (['corduroy', 'shirt'], 'shirts'),
+    (['corduroy', 'shirts'], 'shirts'),
+    (['corduroy', 'jacket'], 'jackets'),
+    (['corduroy', 'jackets'], 'jackets'),
+    (['canvas', 'sneakers'], 'sneakers'),
+    (['canvas', 'sneaker'], 'sneakers'),
+    (['canvas', 'shoes'], 'sneakers'),
+    (['canvas', 'shoe'], 'sneakers'),
+    (['suede', 'sneakers'], 'sneakers'),
+    (['suede', 'sneaker'], 'sneakers'),
+    (['suede', 'shoes'], 'sneakers'),
+    (['suede', 'shoe'], 'sneakers'),
+    (['linen', 'shirt'], 'shirts'),
+    (['linen', 'shirts'], 'shirts'),
+    (['cotton', 'kurta'], 'kurtas'),
+    (['cotton', 'kurtas'], 'kurtas'),
+    (['silk', 'kurta'], 'kurtas'),
+    (['silk', 'kurtas'], 'kurtas'),
+    (['chikankari', 'kurta'], 'kurtas'),
+    (['chikankari', 'kurtas'], 'kurtas'),
+    (['shirt', 'dress'], 'dresses'),
+    (['shirt', 'dresses'], 'dresses'),
+    (['midi', 'dress'], 'dresses'),
+    (['midi', 'dresses'], 'dresses'),
+    (['card', 'holder'], 'wallets'),
+    (['card', 'holders'], 'wallets'),
+    (['bifold', 'wallet'], 'wallets'),
+    (['bifold', 'wallets'], 'wallets'),
+    (['trifold', 'wallet'], 'wallets'),
+    (['trifold', 'wallets'], 'wallets'),
+    (['analog', 'watch'], 'watches'),
+    (['analog', 'watches'], 'watches'),
+    (['digital', 'watch'], 'watches'),
+    (['digital', 'watches'], 'watches'),
 ]
 
 SINGLE_WORD_CATEGORIES = {
-    'sneakers': 'sneakers', 'sneaker': 'sneakers', 'kicks': 'sneakers', 'trainers': 'sneakers', 'trainer': 'sneakers', 'loafers': 'sneakers', 'loafer': 'sneakers', 'cleats': 'running shoes',
+    'sneakers': 'sneakers', 'sneaker': 'sneakers', 'kicks': 'sneakers', 'trainers': 'sneakers', 'trainer': 'sneakers', 'loafers': 'sneakers', 'cleats': 'running shoes',
     'sandals': 'sandals', 'sandal': 'sandals', 'slides': 'sandals', 'floaters': 'sandals', 'chappal': 'sandals', 'chappals': 'sandals', 'slippers': 'sandals', 'flip-flops': 'sandals', 'flipflops': 'sandals', 'sandels': 'sandals',
     'hoodies': 'hoodies', 'hoodie': 'hoodies', 'hoody': 'hoodies', 'sweatshirt': 'hoodies', 'sweatshirts': 'hoodies', 'pullover': 'hoodies',
-    'jackets': 'jackets', 'jacket': 'jackets', 'windbreaker': 'jackets', 'windbreakers': 'jackets', 'coat': 'jackets', 'blazer': 'jackets', 'outerwear': 'jackets', 'outerwears': 'jackets',
-    'jeans': 'jeans', 'jean': 'jeans', 'denims': 'jeans', 'denim': 'jeans', 'chinos': 'jeans',
+    'jackets': 'jackets', 'jacket': 'jackets', 'windbreaker': 'jackets', 'windbreakers': 'jackets', 'coat': 'jackets', 'blazer': 'jackets',
+    'jeans': 'jeans', 'jean': 'jeans', 'denims': 'jeans', 'chinos': 'jeans',
     'kurtas': 'kurtas', 'kurta': 'kurtas', 'kurti': 'kurtas', 'kurties': 'kurtas',
     'dresses': 'dresses', 'dress': 'dresses',
     'caps': 'caps', 'cap': 'caps', 'hat': 'caps', 'beanie': 'caps',
@@ -120,9 +180,9 @@ SINGLE_WORD_CATEGORIES = {
     'trackpants': 'track pants', 'joggers': 'track pants', 'lower': 'track pants', 'lowers': 'track pants', 'trousers': 'track pants', 'trouser': 'track pants', 'pajama': 'track pants', 'pajamas': 'track pants', 'bottoms': 'track pants', 'trackies': 'track pants',
     'tshirt': 't-shirts', 'tshirts': 't-shirts', 'tee': 't-shirts', 'tees': 't-shirts', 't-shirt': 't-shirts', 't-shirts': 't-shirts', 'polo': 't-shirts', 'polos': 't-shirts', 'top': 't-shirts',
     'runners': 'running shoes',
-    'joota': 'sneakers', 'joote': 'sneakers', 'juta': 'sneakers', 'jute': 'sneakers',
     'shoes': 'sneakers', 'shoe': 'sneakers', 'footwear': 'sneakers',
     'pants': 'track pants', 'pant': 'track pants',
+    'joota': 'sneakers', 'joote': 'sneakers', 'juta': 'sneakers', 'jute': 'sneakers',
 }
 
 MULTI_WORD_BRANDS = [
@@ -250,6 +310,41 @@ STOPWORDS = {
     'thoda', 'sasta', 'mehenga', 'waala'
 }
 
+PRICE_PREPOSITIONS = {
+    'under', 'below', 'less', 'within', 'above', 'over', 'around',
+    'approx', 'upto', 'between', 'max', 'min', 'budget', 'price',
+    'andar', 'kam', 'se', 'tak', 'rupees', 'rs', 'inr', 'bucks', 'than',
+    'more', 'greater', 'least', 'starting', 'starts', 'start', 'plus',
+    'onwards', 'upar', 'zyada', 'jyada', 'adhik', 'minimum', 'maximum', 'at'
+}
+
+CATEGORY_STEMS = {
+    'shoe', 'shoes', 'sneaker', 'sneakers', 'sandal', 'sandals', 'slides',
+    'shirt', 'shirts', 'tshirt', 'tshirts', 'tee', 'tees', 't', 'top',
+    'jacket', 'jackets', 'coat', 'hoodie', 'hoodies', 'sweatshirt',
+    'dress', 'dresses', 'kurta', 'kurtas', 'kurti', 'pant', 'pants',
+    'jeans', 'jean', 'denims', 'lower', 'lowers', 'trousers',
+    'wallet', 'wallets', 'watch', 'watches', 'headphone', 'headphones',
+    'cap', 'caps', 'hat', 'hats', 'bag', 'bags', 'backpack', 'backpacks'
+}
+
+STYLE_OR_MATERIAL_MODIFIERS = {
+    'denim', 'leather', 'linen', 'cotton', 'silk', 'fleece', 'corduroy',
+    'canvas', 'suede', 'satin', 'bomber', 'puffer', 'quilted', 'chikankari',
+    'bifold', 'trifold', 'oversized', 'printed', 'graphic', 'pocket',
+    'analog', 'digital', 'wireless', 'gaming', 'classic', 'court',
+    'platform', 'tapered', 'cuffed', 'lightweight', 'training', 'slide',
+    'flip', 'cushion', 'draped', 'halterneck', 'midi', 'mandarin',
+    'poplin', 'oxford', 'baseball', 'trucker', 'velvet', 'wool', 'woolen',
+    'nylon', 'polyester', 'mesh', 'windbreaker'
+}
+
+FILLER_WORDS = {
+    'men', 'mens', "men's", 'women', 'womens', "women's",
+    'boy', 'boys', 'girl', 'girls', 'size', 'uk', 'color', 'colour',
+    'pair', 'piece', 'item', 'quality', 'product', 'type', 'good', 'nice'
+}
+
 
 def clean_token(t: str) -> str:
     """Normalize a raw token."""
@@ -301,21 +396,12 @@ def parse_price_phrase(tokens: List[str], i: int) -> Optional[Tuple[int, int]]:
         if i + 1 < n and tokens[i+1] in ('hundred', 'sau', 'so'):
             return (teens * 100, i + 2)
 
-    # English fractions: "two and a half thousand" -> 2500
-    if i + 4 < n and tokens[i] in ENGLISH_NUMBERS and tokens[i+1:i+4] == ['and', 'a', 'half'] and tokens[i+4] in ('thousand', 'hazaar', 'hazar'):
-        return (int((ENGLISH_NUMBERS[tokens[i]] + 0.5) * 1000), i + 5)
-
-    # Num thousand num hundred (supports digit strings e.g. "4 hazaar" or word numbers "four hazaar")
+    # Num thousand num hundred
     num1 = ENGLISH_NUMBERS.get(tokens[i]) or HINDI_NUMBERS.get(tokens[i])
-    if num1 is None and tokens[i].isdigit() and int(tokens[i]) < 200:
-        num1 = int(tokens[i])
-
     if num1 is not None and i + 1 < n and tokens[i+1] in ('thousand', 'hazaar', 'hazar'):
         val = num1 * 1000
         if i + 3 < n:
             num2 = ENGLISH_NUMBERS.get(tokens[i+2]) or HINDI_NUMBERS.get(tokens[i+2])
-            if num2 is None and tokens[i+2].isdigit() and int(tokens[i+2]) < 100:
-                num2 = int(tokens[i+2])
             if num2 is not None and tokens[i+3] in ('hundred', 'sau', 'so'):
                 return (val + num2 * 100, i + 4)
         return (val, i + 2)
@@ -341,6 +427,74 @@ def parse_price_phrase(tokens: List[str], i: int) -> Optional[Tuple[int, int]]:
             return (val, i + 1)
 
     return None
+
+
+def detect_price_direction(tokens: List[str], start_idx: int, end_idx: int) -> str:
+    """Determine whether the price phrase at tokens[start_idx:end_idx] represents
+    'min_price' or 'max_price'.
+    """
+    # 1. Check preceding tokens (up to 3 words before start_idx)
+    # Negative forms of upper bounds -> max_price:
+    if start_idx >= 3 and tokens[start_idx-3:start_idx] in (
+        ['not', 'more', 'than'],
+        ['not', 'greater', 'than'],
+        ['no', 'more', 'than'],
+    ):
+        return 'max_price'
+
+    if start_idx >= 2 and tokens[start_idx-2:start_idx] in (
+        ['not', 'over'],
+        ['not', 'above'],
+        ['no', 'more'],
+        ['less', 'than'],
+        ['not', 'exceeding'],
+        ['up', 'to'],
+    ):
+        return 'max_price'
+
+    # Range check: "between <p1> and/to <p2>"
+    if start_idx >= 1 and tokens[start_idx-1] in ('and', 'to', 'se'):
+        if any(tok in ('between', 'range', 'from') for tok in tokens[:start_idx]):
+            return 'max_price'
+
+    if start_idx >= 1 and tokens[start_idx-1] in ('between',):
+        return 'min_price'
+
+    # Min cues preceding price:
+    if start_idx >= 2:
+        prev2 = tokens[start_idx-2:start_idx]
+        if prev2 in (
+            ['more', 'than'], ['greater', 'than'], ['at', 'least'],
+            ['starting', 'from'], ['starting', 'at'], ['starts', 'at'],
+            ['starts', 'from'], ['minimum', 'of'], ['min', 'of'],
+            ['no', 'less']
+        ):
+            return 'min_price'
+
+    if start_idx >= 1:
+        prev1 = tokens[start_idx-1]
+        if prev1 in ('above', 'over', 'min', 'minimum', 'exceeding'):
+            return 'min_price'
+        if prev1 in ('from', 'starts', 'starting') and (start_idx < 2 or tokens[start_idx-2] not in ('under', 'below')):
+            return 'min_price'
+
+    # 2. Check succeeding tokens (after end_idx)
+    n = len(tokens)
+    if end_idx < n:
+        if end_idx + 2 <= n:
+            next2 = tokens[end_idx:end_idx+2]
+            if next2 in (
+                ['se', 'zyada'], ['se', 'jyada'], ['se', 'upar'], ['se', 'adhik'],
+                ['and', 'above'], ['or', 'above'], ['and', 'more'], ['or', 'more'],
+                ['and', 'over'], ['or', 'over'], ['se', 'bhi', 'zyada'], ['se', 'bhi', 'upar']
+            ):
+                return 'min_price'
+        next1 = tokens[end_idx]
+        if next1 in ('plus', 'onwards', 'upar', 'zyada', 'jyada', 'adhik'):
+            return 'min_price'
+
+    # Default to max_price
+    return 'max_price'
 
 
 class IncrementalExtractor:
@@ -391,15 +545,6 @@ class IncrementalExtractor:
                 or tokens[start_i - 2:start_i] == ['instead', 'of']
             ):
                 return True
-            # Support conjunctions: "except black or red", "neither black nor red"
-            if start_i > 1 and tokens[start_i - 1] in ('or', 'nor', 'and'):
-                for lookback in range(2, 5):
-                    if start_i - lookback >= 0:
-                        prev = tokens[start_i - lookback]
-                        if prev in NEGATION_WORDS or prev in ('other', 'instead'):
-                            return True
-                        if prev not in ('or', 'nor', 'and', 'either', 'neither') and prev not in COLOURS and prev not in BRANDS_LOWER:
-                            break
             return False
 
         def register_slot(slot_name: str, val: any, w_idx: int, prov: str, start_i: int):
@@ -473,7 +618,7 @@ class IncrementalExtractor:
                 continue
 
             # 6. Safe fuzzy match for categories (only if len >= FUZZY_MIN_LEN)
-            if len(tok) >= FUZZY_MIN_LEN:
+            if len(tok) >= FUZZY_MIN_LEN and tok not in STYLE_OR_MATERIAL_MODIFIERS:
                 matched_fuzzy_cat = None
                 for c_syn, c_canon in SINGLE_WORD_CATEGORIES.items():
                     if len(c_syn) >= FUZZY_MIN_LEN and levenshtein_1(tok, c_syn):
@@ -510,55 +655,11 @@ class IncrementalExtractor:
             p_res = parse_price_phrase(tokens, i)
             if p_res:
                 val, end_idx = p_res
-
-                # Check if preceding tokens specify min_price vs max_price
-                is_min = False
-                if i > 2 and tokens[i-3:i] in (['not', 'more', 'than'], ['no', 'more', 'than'], ['not', 'above', 'than']):
-                    is_min = False
-                elif i > 1 and tokens[i-2:i] in (['not', 'exceeding'], ['not', 'above'], ['no', 'more']):
-                    is_min = False
-                elif i > 2 and tokens[i-3:i] in (['not', 'less', 'than'], ['no', 'less', 'than'], ['not', 'under', 'than']):
-                    is_min = True
-                elif i > 1 and tokens[i-2:i] in (['not', 'less'], ['not', 'under'], ['not', 'below']):
-                    is_min = True
-                elif i > 1 and tokens[i-2:i] in (
-                    ['more', 'than'], ['greater', 'than'], ['at', 'least'],
-                    ['starting', 'from'], ['starting', 'at'],
-                    ['se', 'upar'], ['se', 'zyada'], ['se', 'jyada']
-                ):
-                    is_min = True
-                elif i > 0 and tokens[i-1] in ('above', 'over', 'min', 'minimum'):
-                    is_min = True
-                elif i > 0 and tokens[i-1] in ('upar', 'zyada', 'jyada'):
-                    is_min = True
-
-                # Check succeeding post-position tokens (e.g. "3500 se upar", "7000 se kam")
-                if end_idx < n:
-                    if end_idx + 1 < n and tokens[end_idx:end_idx+2] in (['se', 'upar'], ['se', 'zyada'], ['se', 'jyada']):
-                        is_min = True
-                    elif tokens[end_idx] in ('upar', 'zyada', 'jyada'):
-                        is_min = True
-                    elif end_idx + 1 < n and tokens[end_idx:end_idx+2] in (['se', 'kam'], ['se', 'niche']):
-                        is_min = False
-                    elif tokens[end_idx] in ('kam', 'niche', 'tak'):
-                        is_min = False
-
-                # Check for range syntax: "between 2000 and 5000" or "2000 to 5000"
-                is_range_start = (i > 0 and tokens[i-1] == 'between')
-                has_range_sep = (end_idx < n and tokens[end_idx] in ('and', 'to', '-'))
-
-                if (is_range_start or has_range_sep) and end_idx < n:
-                    sep_offset = 1 if has_range_sep else 0
-                    p_res2 = parse_price_phrase(tokens, end_idx + sep_offset)
-                    if p_res2:
-                        val2, end_idx2 = p_res2
-                        register_slot('min_price', min(val, val2), i + 1, "price_range_min", i)
-                        register_slot('max_price', max(val, val2), end_idx + sep_offset + 1, "price_range_max", end_idx + sep_offset)
-                        i = end_idx2
-                        continue
-
-                slot_name = 'min_price' if is_min else 'max_price'
-                register_slot(slot_name, val, i + 1, "price", i)
+                slot_key = detect_price_direction(tokens, i, end_idx)
+                if self.correction_seen:
+                    opp = 'max_price' if slot_key == 'min_price' else 'min_price'
+                    slots_found.pop(opp, None)
+                register_slot(slot_key, val, i + 1, "price", i)
                 i = end_idx
                 continue
 
@@ -651,26 +752,6 @@ class IncrementalExtractor:
                 inferred_cat = BRAND_EXCLUSIVE_CATEGORY[b_low]
                 slots_found['category'] = (inferred_cat, slots_found['brand'][1], "inferred_from_brand")
 
-        # Resolve conflicting price bounds or price corrections (e.g. "under 400 sorry above 5000")
-        if 'min_price' in slots_found and 'max_price' in slots_found:
-            min_val, min_w, min_prov = slots_found['min_price']
-            max_val, max_w, max_prov = slots_found['max_price']
-            is_explicit_range = ("price_range" in str(min_prov) and "price_range" in str(max_prov))
-
-            has_correction_between = False
-            first_w, second_w = sorted([min_w, max_w])
-            for t_idx in range(max(0, first_w - 1), min(len(tokens), second_w)):
-                if tokens[t_idx] in CORRECTION_SIGNALS:
-                    has_correction_between = True
-                    break
-
-            if not is_explicit_range and (min_val >= max_val or has_correction_between):
-                # The later price token supersedes the earlier one
-                if min_w > max_w:
-                    del slots_found['max_price']
-                else:
-                    del slots_found['min_price']
-
         # Update FilterState
         for slot in ('category', 'colour', 'brand', 'size', 'max_price', 'min_price'):
             if slot in slots_found:
@@ -733,60 +814,35 @@ class IncrementalExtractor:
     def get_residual_query(self) -> str:
         """Return non-filter, non-stopword tokens for descriptive search ranking."""
         tokens = self.tokens
-        filter_tokens = set()
+        consumed_tokens = set()
         for s in ('category', 'colour', 'brand', 'size', 'max_price', 'min_price'):
             fv = getattr(self.state, s)
             if fv is not None:
-                val_str = str(fv.value).lower()
-                filter_tokens.add(val_str)
-                for part in val_str.split():
-                    filter_tokens.add(part)
-
-        price_operators = {
-            'under', 'below', 'less', 'within', 'above', 'more', 'than',
-            'max', 'min', 'budget', 'upto', 'up', 'around', 'approx', 'price',
-            'rupees', 'rs', 'inr', 'bucks', 'k', 'hazaar', 'hazar', 'thousand',
-            'hundred', 'sau', 'so', 'cost', 'worth'
-        }
-
-        size_indicators = {
-            'size', 'uk', 'waist', 'number', 'no', 'inch', 'inches',
-            'small', 'medium', 'large', 'xs', 'xl', 'xxl', '2xl', 'xxs',
-            's', 'm', 'l'
-        }
-
-        category_keywords = set(CATEGORIES)
-        category_keywords.update(SINGLE_WORD_CATEGORIES.keys())
-        category_keywords.update(SINGLE_WORD_CATEGORIES.values())
-        for phrase, _ in MULTI_WORD_CATEGORIES:
-            category_keywords.update(phrase)
-
-        brand_keywords = set(BRANDS_LOWER.keys())
-        for phrase, _ in MULTI_WORD_BRANDS:
-            brand_keywords.update(phrase)
-
-        colour_keywords = set(COLOURS)
-        colour_keywords.update(COLOUR_MAP.keys())
-        for phrase, _ in COMPOUND_COLOURS:
-            colour_keywords.update(phrase)
+                for p in fv.provenance:
+                    for word in p.lower().split():
+                        consumed_tokens.add(word)
+                for word in str(fv.value).lower().split():
+                    consumed_tokens.add(word)
 
         res_tokens = []
         for t in tokens:
-            if (
-                t in STOPWORDS
-                or t in UNIVERSAL_CLOSURE_WORDS
-                or t in CORRECTION_SIGNALS
-                or t in price_operators
-                or t in size_indicators
-                or t in filter_tokens
-                or t in category_keywords
-                or t in brand_keywords
-                or t in colour_keywords
-                or t in ALL_SIZES
-                or t.isdigit()
-            ):
+            t_clean = t.lower()
+            if t_clean in STYLE_OR_MATERIAL_MODIFIERS:
+                if t_clean not in res_tokens:
+                    res_tokens.append(t_clean)
                 continue
-            res_tokens.append(t)
+
+            if (
+                t_clean not in STOPWORDS
+                and t_clean not in UNIVERSAL_CLOSURE_WORDS
+                and t_clean not in consumed_tokens
+                and t_clean not in PRICE_PREPOSITIONS
+                and t_clean not in CATEGORY_STEMS
+                and t_clean not in FILLER_WORDS
+                and t_clean not in NEGATION_WORDS
+            ):
+                if t_clean not in res_tokens:
+                    res_tokens.append(t_clean)
 
         self.state.residual_tokens = res_tokens
         return " ".join(res_tokens)

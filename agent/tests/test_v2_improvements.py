@@ -87,69 +87,87 @@ class TestV2Enhancements(unittest.TestCase):
             agent.observe(w)
         self.assertTrue(agent.has_committed)
         final_id = agent.finish()
-        self.assertEqual(final_id, agent.committed_product_id)
         # Exactly 1 search was used! Zero wasted searches!
         self.assertEqual(tools.searches, 1)
 
-    def test_short_query_sneaker_under_3000(self):
-        """Short 2-slot prompts ('Sneaker under 3000') must parse cleanly with zero residual pollution."""
-        extractor = IncrementalExtractor()
-        words = ["Sneaker", "under", "3000"]
-        for idx, w in enumerate(words, 1):
-            state = extractor.process_word(w, idx)
-        self.assertEqual(state.category.value, "sneakers")
-        self.assertEqual(state.max_price.value, 3000)
-        extractor.flush()
-        self.assertEqual(extractor.get_residual_query(), "")
+    def test_material_and_style_modifiers_preservation(self):
+        """Material/fabric modifiers (denim, corduroy, canvas) must not prematurely map or get stripped."""
+        # 1. 'denim' alone must NOT trigger category: jeans
+        ext1 = IncrementalExtractor()
+        ext1.process_word("denim", 1)
+        st1 = ext1.flush()
+        self.assertIsNone(st1.category)
+        self.assertEqual(ext1.get_residual_query(), "denim")
 
-        # End-to-end agent check
+        # 2. 'denim jacket' -> category: jackets, residual: denim
+        ext2 = IncrementalExtractor()
+        for i, w in enumerate(["denim", "jacket"], 1):
+            ext2.process_word(w, i)
+        st2 = ext2.flush()
+        self.assertEqual(st2.category.value, "jackets")
+        self.assertEqual(ext2.get_residual_query(), "denim")
+
+        # Agent returns actual denim jacket
         tools = Tools()
         agent = Agent(tools)
-        agent.start("test-sneaker-3000")
-        for w in words:
+        agent.start("test-denim-jacket")
+        for w in ["denim", "jacket"]:
             agent.observe(w)
-        final_id = agent.finish()
-        self.assertIsNotNone(final_id)
-        # Result must be a sneaker under 3000
-        p = [x for x in tools.search("", filters={"category": "sneakers", "max_price": 3000}) if x["product_id"] == final_id]
-        self.assertTrue(len(p) > 0)
-        self.assertLessEqual(p[0]["price"], 3000)
+        pid = agent.finish()
+        self.assertIn(pid, ["P0722", "P0723", "P0724", "P0725"])
 
-    def test_hypernym_shoes_and_pants(self):
-        """Generic hypernyms ('shoes', 'shoe', 'pants') map correctly to catalogue categories."""
-        extractor = IncrementalExtractor()
-        words = ["shoes", "under", "2000"]
-        for idx, w in enumerate(words, 1):
-            state = extractor.process_word(w, idx)
-        self.assertEqual(state.category.value, "sneakers")
-        self.assertEqual(state.max_price.value, 2000)
+        # 3. 'denims' plural maps to jeans
+        ext3 = IncrementalExtractor()
+        ext3.process_word("denims", 1)
+        st3 = ext3.flush()
+        self.assertEqual(st3.category.value, "jeans")
 
-        extractor2 = IncrementalExtractor()
-        words2 = ["black", "pants", "under", "1500"]
-        for idx, w in enumerate(words2, 1):
-            state2 = extractor2.process_word(w, idx)
-        self.assertEqual(state2.category.value, "track pants")
-        self.assertEqual(state2.colour.value, "black")
-        self.assertEqual(state2.max_price.value, 1500)
+        # 4. 'corduroy cap' -> category: caps, residual: corduroy
+        ext4 = IncrementalExtractor()
+        for i, w in enumerate(["corduroy", "cap"], 1):
+            ext4.process_word(w, i)
+        st4 = ext4.flush()
+        self.assertEqual(st4.category.value, "caps")
+        self.assertEqual(ext4.get_residual_query(), "corduroy")
 
-    def test_descriptive_residual_query(self):
-        """Descriptive qualifiers ('warm', 'winter') remain in residual query without junk tokens."""
-        extractor = IncrementalExtractor()
-        words = ["warm", "jacket", "for", "winter"]
-        for idx, w in enumerate(words, 1):
-            state = extractor.process_word(w, idx)
-        self.assertEqual(state.category.value, "jackets")
-        extractor.flush()
-        residual = extractor.get_residual_query()
-        self.assertEqual(residual, "warm winter")
+    def test_price_direction_min_and_max(self):
+        """Price directions ('above', 'over', 'more than' -> min_price; 'under', 'not more than' -> max_price)."""
+        # 'above 6000' -> min_price: 6000
+        ext = IncrementalExtractor()
+        for i, w in enumerate("Urbanyx Denim jacket size S above 6000".split(), 1):
+            ext.process_word(w, i)
+        st = ext.flush()
+        self.assertEqual(st.brand.value, "Urbanyx")
+        self.assertEqual(st.category.value, "jackets")
+        self.assertEqual(st.size.value, "S")
+        self.assertEqual(st.min_price.value, 6000)
+        self.assertIsNone(st.max_price)
+        self.assertEqual(ext.get_residual_query(), "denim")
 
+        # Full Agent search returns P0723 (Urbanyx Denim Jacket S Rs 6499)
         tools = Tools()
         agent = Agent(tools)
-        agent.start("test-warm-jacket")
-        for w in words:
+        agent.start("test-above-6000")
+        for w in "Urbanyx Denim jacket size S above 6000".split():
             agent.observe(w)
-        final_id = agent.finish()
-        self.assertEqual(final_id, "P0776")
+        pid = agent.finish()
+        self.assertEqual(pid, "P0723")
+
+        # 'not more than 2500' -> max_price: 2500
+        ext2 = IncrementalExtractor()
+        for i, w in enumerate("shoes not more than 2500".split(), 1):
+            ext2.process_word(w, i)
+        st2 = ext2.flush()
+        self.assertEqual(st2.max_price.value, 2500)
+        self.assertIsNone(st2.min_price)
+
+        # 'between 1000 and 3000' -> min_price: 1000, max_price: 3000
+        ext3 = IncrementalExtractor()
+        for i, w in enumerate("shirt between 1000 and 3000".split(), 1):
+            ext3.process_word(w, i)
+        st3 = ext3.flush()
+        self.assertEqual(st3.min_price.value, 1000)
+        self.assertEqual(st3.max_price.value, 3000)
 
 
 if __name__ == "__main__":

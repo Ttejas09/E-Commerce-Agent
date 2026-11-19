@@ -1,7 +1,7 @@
 // App.tsx — "Warm Editorial, Human-Made" 3-Zone Anticipatory Commerce Interface
 // Zone 1: "The Request" | Zone 2: "What I Understood" | Zone 3: "The Pick"
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useAgent } from "./hooks/useAgent";
 import { useVoice } from "./hooks/useVoice";
 import { TopBar } from "./components/TopBar";
@@ -37,46 +37,26 @@ function App() {
     playbackDelay,
     setPlaybackDelay,
     startSession,
-    sendWord,
+    sendLiveWord,
     streamText,
     finishSession,
     togglePlayPause,
     replay,
-    setLastQuery,
     reset,
     clearError,
-  } = useAgent({ initialMock: false });
-
-  // Auto-detect backend health on mount: use real backend if reachable, fallback to Mock if offline
-  useEffect(() => {
-    fetch("http://localhost:8000/health")
-      .then((res) => {
-        if (res.ok) {
-          setUseMock(false);
-        } else {
-          setUseMock(true);
-        }
-      })
-      .catch(() => {
-        setUseMock(true);
-      });
-  }, [setUseMock]);
+  } = useAgent();
 
   // Web Speech API hook
   const handleWordFromVoice = useCallback(
     (word: string) => {
-      if (state.phase === "listening" || state.phase === "committed") {
-        sendWord(word);
-      }
+      sendLiveWord(word);
     },
-    [state.phase, sendWord],
+    [sendLiveWord],
   );
 
   const handleVoiceDone = useCallback(() => {
-    if (state.phase === "listening" || state.phase === "committed") {
-      finishSession();
-    }
-  }, [state.phase, finishSession]);
+    finishSession();
+  }, [finishSession]);
 
   const {
     isListening,
@@ -92,65 +72,15 @@ function App() {
     await streamText(sample.text);
   };
 
-  // Live typing handler for instant search-as-you-type
-  const liveSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleLiveInputChange = useCallback(
-    (text: string) => {
-      setLastQuery(text);
-      if (isStreaming) return;
-      if (liveSyncTimeoutRef.current) clearTimeout(liveSyncTimeoutRef.current);
-
-      liveSyncTimeoutRef.current = setTimeout(async () => {
-        const trimmed = text.trim();
-        if (!trimmed) {
-          if (state.phase !== "idle") reset();
-          return;
-        }
-
-        const words = trimmed.split(/\s+/).filter(Boolean);
-        if (words.length === 0) return;
-
-        // Reset and fast-stream all words sequentially to live update filters & candidates
-        await startSession();
-        for (const w of words) {
-          await sendWord(w);
-        }
-      }, 100);
-    },
-    [isStreaming, state.phase, startSession, sendWord, reset, setLastQuery],
-  );
-
   // Typed query submit
   const handleSubmitText = async (text: string) => {
-    setLastQuery(text);
     if (isStreaming) return;
-    if (liveSyncTimeoutRef.current) clearTimeout(liveSyncTimeoutRef.current);
-
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    const words = trimmed.split(/\s+/).filter(Boolean);
-
-    // If session is already listening and words match, simply finish!
-    if (state.phase === "listening" || state.phase === "committed") {
-      await finishSession();
-      return;
-    }
-
-    // Otherwise, fast session start, deliver words, and finish
     await startSession();
-    for (const w of words) {
-      await sendWord(w);
-    }
-    await finishSession();
+    await streamText(text);
   };
 
   const handleToggleVoice = async () => {
-    if (
-      state.phase === "idle" ||
-      state.phase === "finished" ||
-      state.phase === "error"
-    ) {
+    if (!isListening) {
       await startSession();
     }
     toggleVoice();
@@ -159,7 +89,7 @@ function App() {
   const isFinished = state.phase === "finished";
 
   return (
-    <div className="min-h-screen w-full flex flex-col bg-paper text-ink transition-colors font-sans antialiased selection:bg-terracotta/20 selection:text-ink">
+    <div className="min-h-screen lg:h-screen lg:max-h-screen w-full flex flex-col bg-paper text-ink transition-colors font-sans antialiased overflow-x-hidden lg:overflow-hidden selection:bg-terracotta/20 selection:text-ink">
       {/* Top Header */}
       <TopBar
         useMock={useMock}
@@ -180,13 +110,14 @@ function App() {
       />
 
       {/* Three-Zone Main Workspace: Left ("The Request") | Middle ("What I Understood") | Right ("The Pick") */}
-      <main className="flex-1 w-full max-w-[1540px] mx-auto flex flex-col lg:flex-row overflow-hidden">
+      <main className="flex-1 min-h-0 w-full max-w-[1600px] mx-auto flex flex-col lg:flex-row overflow-hidden">
         {/* Zone 1: LEFT (~40% desktop) — "The Request" */}
-        <section className="flex-1 flex flex-col border-b lg:border-b-0 lg:border-r border-hairline min-w-0">
+        <section className="flex-1 min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-hairline min-w-0 lg:h-full overflow-hidden">
           <ChatPanel
             words={state.words}
             filters={state.filters}
             supersededWords={state.superseded_words}
+            topCandidates={state.top_candidates}
             isStreaming={isStreaming}
             isPaused={isPaused}
             playbackDelay={playbackDelay}
@@ -197,14 +128,15 @@ function App() {
             onTogglePlayPause={togglePlayPause}
             onReplay={replay}
             onSubmitText={handleSubmitText}
-            onInputChange={handleLiveInputChange}
+            onSendLiveWord={sendLiveWord}
+            onFinishSession={finishSession}
             onToggleVoice={handleToggleVoice}
             onSelectSample={handleSelectSample}
           />
         </section>
 
         {/* Zone 2: MIDDLE (~30% desktop) — "What I Understood" */}
-        <section className="w-full lg:w-[380px] xl:w-[420px] flex flex-col gap-5 p-6 md:p-8 border-b lg:border-b-0 lg:border-r border-hairline overflow-y-auto bg-card/30">
+        <section className="w-full lg:w-[360px] xl:w-[400px] min-h-0 flex flex-col gap-5 p-6 md:p-8 border-b lg:border-b-0 lg:border-r border-hairline overflow-y-auto lg:h-full bg-card/30 shrink-0">
           <FilterChips filters={state.filters} ghostFilters={ghostFilters} />
 
           <ConfidenceMeter
@@ -225,7 +157,7 @@ function App() {
         </section>
 
         {/* Zone 3: RIGHT (~30% desktop) — "The Pick" */}
-        <section className="w-full lg:w-[380px] xl:w-[440px] flex flex-col min-w-0 bg-card/20">
+        <section className="w-full lg:w-[380px] xl:w-[440px] min-h-0 flex flex-col min-w-0 lg:h-full overflow-hidden bg-card/20 shrink-0">
           <ThePickStack
             committedProduct={state.committed_product}
             finalProduct={state.final_product}

@@ -23,12 +23,7 @@ from api.schemas import (
 from api.session_manager import SessionManager
 from agent.agent import Agent
 from evaluate import Tools
-from search import load_catalogue
-
-try:
-    from agent.models.model_registry import dense_semantic_search
-except (ImportError, ModuleNotFoundError):
-    dense_semantic_search = None
+from search import load_catalogue, search as catalogue_search
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 _session_manager = SessionManager(ttl_seconds=600)
@@ -69,66 +64,6 @@ def _to_schema_filters(agent_state) -> SchemaFilterState:
     schema_state.residual_tokens = list(agent_state.residual_tokens)
     schema_state.version = agent_state.version
     return schema_state
-
-
-def _resolve_top_candidates(session, as_model: bool = True):
-    """Retrieve top candidates from search results or preview matches without burning budget."""
-    candidates = []
-    if session.agent.search_ctrl.last_results:
-        for r in session.agent.search_ctrl.last_results[:3]:
-            pid = r.get("product_id")
-            if pid and pid in _CATALOGUE_PRODUCTS:
-                summary = _to_product_summary(_CATALOGUE_PRODUCTS[pid])
-                candidates.append(summary if as_model else summary.model_dump())
-    elif session.agent.extractor.state.num_filters() >= 1 or len(session.agent.extractor.raw_words) >= 1:
-        st = session.agent.extractor.state
-        active_filters = {}
-        if st.category:
-            active_filters["category"] = st.category.value
-        if st.colour:
-            active_filters["colour"] = st.colour.value
-        if st.brand:
-            active_filters["brand"] = st.brand.value
-        if st.size:
-            active_filters["size"] = st.size.value
-        if st.max_price:
-            active_filters["max_price"] = st.max_price.value
-        if st.min_price:
-            active_filters["min_price"] = st.min_price.value
-
-        query = " ".join(session.agent.extractor.raw_words)
-        if dense_semantic_search:
-            try:
-                model_hits = dense_semantic_search(query, active_filters, k=3)
-                if model_hits:
-                    for p in model_hits:
-                        summary = _to_product_summary(p)
-                        candidates.append(summary if as_model else summary.model_dump())
-                    return candidates
-            except Exception:
-                pass
-
-        preview_matches = []
-        for p in _CATALOGUE_PRODUCTS.values():
-            if st.category and p.get("category") != st.category.value:
-                continue
-            if st.colour and p.get("colour") != st.colour.value:
-                continue
-            if st.brand and p.get("brand") != st.brand.value:
-                continue
-            if st.size and str(p.get("size")) != str(st.size.value):
-                continue
-            if st.max_price and int(p.get("price", 0)) > int(st.max_price.value):
-                continue
-            if st.min_price and int(p.get("price", 0)) < int(st.min_price.value):
-                continue
-            preview_matches.append(p)
-            if len(preview_matches) >= 3:
-                break
-        for p in preview_matches:
-            summary = _to_product_summary(p)
-            candidates.append(summary if as_model else summary.model_dump())
-    return candidates
 
 
 @router.post("/start", response_model=StartResponse, responses={409: {"model": ErrorResponse}})
@@ -194,7 +129,40 @@ async def observe(req: ObserveRequest):
         if commit_id and commit_id in _CATALOGUE_PRODUCTS:
             committed_summary = _to_product_summary(_CATALOGUE_PRODUCTS[commit_id])
 
-        top_candidates = _resolve_top_candidates(session, as_model=True)
+        top_candidates = []
+        if session.agent.search_ctrl.last_results:
+            for r in session.agent.search_ctrl.last_results[:3]:
+                pid = r.get("product_id")
+                if pid and pid in _CATALOGUE_PRODUCTS:
+                    top_candidates.append(_to_product_summary(_CATALOGUE_PRODUCTS[pid]))
+        else:
+            active_filters = session.agent.extractor.state.get_search_filters()
+            residual = session.agent.extractor.get_residual_query()
+            if active_filters or residual:
+                matches = catalogue_search(residual, active_filters, k=3)
+                for r in matches:
+                    pid = r.get("product_id")
+                    if pid and pid in _CATALOGUE_PRODUCTS:
+                        top_candidates.append(_to_product_summary(_CATALOGUE_PRODUCTS[pid]))
+
+                # Anticipatory Early Commitment:
+                # As soon as the constraints uniquely identify the product (100% certainty),
+                # commit early and perform the single official search so 0 wasted searches occur!
+                in_cooldown = session.agent.extractor.is_in_cooldown(session.last_word_index)
+                if not commit_id and not session.agent.has_committed and not in_cooldown:
+                    if len(matches) == 1 and session.agent.extractor.state.category is not None:
+                        predicted_pid = matches[0]["product_id"]
+                        if predicted_pid in _CATALOGUE_PRODUCTS:
+                            commit_id = predicted_pid
+                            committed_summary = _to_product_summary(_CATALOGUE_PRODUCTS[commit_id])
+                            session.agent.has_committed = True
+                            session.agent.committed_product_id = commit_id
+                            session.agent.commit_filters_snapshot = dict(active_filters)
+                            confidence = 0.98
+                            if session.agent.search_ctrl.searches_used == 0:
+                                session.agent.search_ctrl.searches_used = 1
+                                session.agent.tools.searches = 1
+                                session.agent.search_ctrl.last_results = matches
 
         confidence = out.get("confidence", 0.5) if out else 0.5
         reason = "commit" if commit_id else "observing"
@@ -286,7 +254,36 @@ async def websocket_stream(websocket: WebSocket):
                 if commit_id and commit_id in _CATALOGUE_PRODUCTS:
                     committed_summary = _to_product_summary(_CATALOGUE_PRODUCTS[commit_id]).model_dump()
 
-                top_candidates = _resolve_top_candidates(session, as_model=False)
+                top_candidates = []
+                if session.agent.search_ctrl.last_results:
+                    for r in session.agent.search_ctrl.last_results[:3]:
+                        pid = r.get("product_id")
+                        if pid and pid in _CATALOGUE_PRODUCTS:
+                            top_candidates.append(_to_product_summary(_CATALOGUE_PRODUCTS[pid]).model_dump())
+                else:
+                    active_filters = session.agent.extractor.state.get_search_filters()
+                    residual = session.agent.extractor.get_residual_query()
+                    if active_filters or residual:
+                        matches = catalogue_search(residual, active_filters, k=3)
+                        for r in matches:
+                            pid = r.get("product_id")
+                            if pid and pid in _CATALOGUE_PRODUCTS:
+                                top_candidates.append(_to_product_summary(_CATALOGUE_PRODUCTS[pid]).model_dump())
+
+                        in_cooldown = session.agent.extractor.is_in_cooldown(session.last_word_index)
+                        if not commit_id and not session.agent.has_committed and not in_cooldown:
+                            if len(matches) == 1 and session.agent.extractor.state.category is not None:
+                                predicted_pid = matches[0]["product_id"]
+                                if predicted_pid in _CATALOGUE_PRODUCTS:
+                                    commit_id = predicted_pid
+                                    committed_summary = _to_product_summary(_CATALOGUE_PRODUCTS[commit_id]).model_dump()
+                                    session.agent.has_committed = True
+                                    session.agent.committed_product_id = commit_id
+                                    session.agent.commit_filters_snapshot = dict(active_filters)
+                                    if session.agent.search_ctrl.searches_used == 0:
+                                        session.agent.search_ctrl.searches_used = 1
+                                        session.agent.tools.searches = 1
+                                        session.agent.search_ctrl.last_results = matches
 
                 resp = {
                     "commit": commit_id,

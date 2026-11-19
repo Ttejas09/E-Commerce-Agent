@@ -1,9 +1,11 @@
 // ChatPanel — Zone 1: "The Request"
-// Big typographic transcript (Fraunces / Instrument Serif 28-36px), hand-drawn SVG squiggle, correction strikethrough with "changed" tag, play/pause controls, sample chips & input
+// Big typographic transcript (Fraunces / Instrument Serif 28-36px), hand-drawn SVG squiggle,
+// correction strikethrough with "changed" tag, live as-you-type token streaming,
+// anticipatory next-constraint suggestions, play/pause controls, sample chips & input.
 
-import { useState, useRef } from "react";
-import { Play, Pause, RotateCcw, Send } from "lucide-react";
-import type { FilterState } from "../types/api";
+import { useState, useRef, useEffect } from "react";
+import { Play, Pause, RotateCcw, Send, Sparkles } from "lucide-react";
+import type { FilterState, ProductSummary } from "../types/api";
 import { VoiceButton } from "./VoiceButton";
 import { SampleChips } from "./SampleChips";
 import { SquiggleUnderline } from "./CommittedStamp";
@@ -14,6 +16,7 @@ interface ChatPanelProps {
   words: string[];
   filters: FilterState;
   supersededWords: string[];
+  topCandidates?: ProductSummary[];
   isStreaming: boolean;
   isPaused: boolean;
   playbackDelay: number;
@@ -24,15 +27,23 @@ interface ChatPanelProps {
   onTogglePlayPause: () => void;
   onReplay: () => void;
   onSubmitText: (text: string) => void;
-  onInputChange?: (text: string) => void;
+  onSendLiveWord?: (word: string) => void;
+  onFinishSession?: () => void;
   onToggleVoice: () => void;
   onSelectSample: (sample: SampleRequest) => void;
+}
+
+interface Prediction {
+  label: string;
+  text: string;
+  slot: string;
 }
 
 export function ChatPanel({
   words,
   filters,
   supersededWords,
+  topCandidates = [],
   isStreaming,
   isPaused,
   playbackDelay,
@@ -43,18 +54,22 @@ export function ChatPanel({
   onTogglePlayPause,
   onReplay,
   onSubmitText,
-  onInputChange,
+  onSendLiveWord,
+  onFinishSession,
   onToggleVoice,
   onSelectSample,
 }: ChatPanelProps) {
   const [inputText, setInputText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const sentWordsCountRef = useRef<number>(0);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setInputText(val);
-    onInputChange?.(val);
-  };
+  // When outer words are cleared (session reset), reset sent words counter
+  useEffect(() => {
+    if (words.length === 0) {
+      sentWordsCountRef.current = 0;
+      setInputText("");
+    }
+  }, [words.length]);
 
   // Map words to filter slots for soft highlights
   const slotMap = new Map<string, string>();
@@ -78,24 +93,138 @@ export function ChatPanel({
     supersededWords.map((w) => w.toLowerCase().replace(/[,.\-!?;:'"]/g, "")),
   );
 
+  // Compute smart anticipatory next constraints from active candidates & remaining slots
+  const predictions: Prediction[] = [];
+  if (topCandidates.length > 0) {
+    // 1. Missing size
+    if (!filters.size) {
+      const sizes = Array.from(
+        new Set(topCandidates.map((c) => c.size).filter(Boolean)),
+      );
+      if (sizes.length > 0) {
+        predictions.push({
+          label: `size ${sizes[0]}`,
+          text: `size ${sizes[0]}`,
+          slot: "size",
+        });
+      }
+    }
+    // 2. Missing colour
+    if (!filters.colour) {
+      const colours = Array.from(
+        new Set(topCandidates.map((c) => c.colour).filter(Boolean)),
+      );
+      if (colours.length > 0) {
+        predictions.push({
+          label: colours[0],
+          text: colours[0],
+          slot: "colour",
+        });
+      }
+    }
+    // 3. Missing max_price
+    if (!filters.max_price) {
+      const prices = topCandidates.map((c) => c.price).filter(Boolean);
+      if (prices.length > 0) {
+        const ceilPrice = Math.ceil(Math.max(...prices) / 500) * 500;
+        predictions.push({
+          label: `under ₹${ceilPrice.toLocaleString("en-IN")}`,
+          text: `under ${ceilPrice}`,
+          slot: "price",
+        });
+      }
+    }
+    // 4. Missing brand
+    if (!filters.brand) {
+      const brands = Array.from(
+        new Set(topCandidates.map((c) => c.brand).filter(Boolean)),
+      );
+      if (brands.length > 0) {
+        predictions.push({
+          label: brands[0],
+          text: brands[0],
+          slot: "brand",
+        });
+      }
+    }
+  }
+
+  // Handle typing: dispatch each word sequentially on space / delimiter for live anticipation!
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputText(val);
+
+    // If input was cleared, reset count
+    if (!val.trim()) {
+      sentWordsCountRef.current = 0;
+      return;
+    }
+
+    // When space/delimiter is entered, send any newly completed words
+    if (/\s+$/.test(val)) {
+      const allTokens = val.trim().split(/\s+/).filter(Boolean);
+      while (sentWordsCountRef.current < allTokens.length) {
+        const wordToSend = allTokens[sentWordsCountRef.current];
+        if (wordToSend && onSendLiveWord) {
+          onSendLiveWord(wordToSend);
+        }
+        sentWordsCountRef.current++;
+      }
+    }
+  };
+
+  const handleApplyPrediction = (predText: string) => {
+    const parts = predText.trim().split(/\s+/).filter(Boolean);
+    if (onSendLiveWord) {
+      for (const w of parts) {
+        onSendLiveWord(w);
+      }
+    } else {
+      onSubmitText(predText);
+    }
+    setInputText((prev) => (prev ? `${prev.trim()} ${predText} ` : `${predText} `));
+    sentWordsCountRef.current += parts.length;
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Tab" && predictions.length > 0 && !inputText.trim()) {
+      e.preventDefault();
+      handleApplyPrediction(predictions[0].text);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
     const trimmed = inputText.trim();
-    if (!trimmed || isStreaming) return;
-    onSubmitText(trimmed);
-    setInputText("");
+    if (trimmed) {
+      const allTokens = trimmed.split(/\s+/).filter(Boolean);
+      while (sentWordsCountRef.current < allTokens.length) {
+        const wordToSend = allTokens[sentWordsCountRef.current];
+        if (wordToSend && onSendLiveWord) {
+          onSendLiveWord(wordToSend);
+        }
+        sentWordsCountRef.current++;
+      }
+    }
+
+    if (onFinishSession) {
+      onFinishSession();
+    }
   };
 
   const currentWordIndex = words.length > 0 ? words.length - 1 : -1;
 
   return (
-    <div className="flex flex-col h-full justify-between gap-5 p-6 md:p-8">
+    <div className="flex flex-col h-full justify-between gap-4 p-6 md:p-8 overflow-hidden">
       {/* Top: Sample Chips */}
-      <SampleChips onSelect={onSelectSample} disabled={isStreaming} />
+      <div className="shrink-0">
+        <SampleChips onSelect={onSelectSample} disabled={isStreaming} />
+      </div>
 
       {/* Center: Big Typographic Transcript */}
       <div
-        className="flex-1 overflow-y-auto min-h-[180px] max-h-[460px] pr-2 flex flex-col justify-center"
+        className="flex-1 min-h-0 overflow-y-auto pr-2 flex flex-col justify-center py-2"
         aria-live="polite"
         role="region"
         aria-label="Spoken customer transcript"
@@ -106,7 +235,7 @@ export function ChatPanel({
               "Tell me what you are looking for..."
             </span>
             <p className="text-xs text-mutedInk font-sans">
-              Speak via the microphone, type below, or try one of the sample requests above.
+              Type live, speak via microphone, or click any suggestion to watch understanding form in real time.
             </p>
           </div>
         ) : (
@@ -169,8 +298,31 @@ export function ChatPanel({
         )}
       </div>
 
-      {/* Bottom Controls: Speed Slider, Player, Voice, Text Input */}
-      <div className="flex flex-col gap-3 pt-4 border-t border-hairline">
+      {/* Bottom Controls: Predictive Chips, Speed Slider, Player, Voice, Text Input */}
+      <div className="flex flex-col gap-3 pt-4 border-t border-hairline shrink-0">
+        {/* Anticipatory Next-Constraint Prediction Pills */}
+        {predictions.length > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto py-1">
+            <span className="flex items-center gap-1 font-mono text-[11px] text-terracotta font-medium tracking-tight whitespace-nowrap">
+              <Sparkles size={13} className="animate-pulse" />
+              Anticipating:
+            </span>
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+              {predictions.map((p, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleApplyPrediction(p.text)}
+                  className="px-2.5 py-1 rounded-full border border-hairline bg-card hover:border-terracotta hover:bg-terracotta/10 text-ink text-xs font-mono transition-all cursor-pointer whitespace-nowrap shadow-2xs hover:scale-105 active:scale-95"
+                  title={`Click or press Tab to add: ${p.label}`}
+                >
+                  + {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Playback Controls & Pace Slider */}
         <div className="flex items-center justify-between text-xs text-mutedInk">
           <div className="flex items-center gap-2">
@@ -217,15 +369,22 @@ export function ChatPanel({
 
         {/* Text Input + Voice Button + Send */}
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputText}
-            onChange={handleInputChange}
-            placeholder="Type your shopping request (live search active)..."
-            disabled={isStreaming}
-            className="flex-1 h-11 px-4 rounded-xl border border-hairline bg-card text-ink placeholder:text-mutedInk/60 text-sm focus:outline-none focus:ring-2 focus:ring-terracotta"
-          />
+          <div className="relative flex-1 flex items-center">
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputText}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                predictions.length > 0
+                  ? `Type next word (or press Tab for "+ ${predictions[0].label}")...`
+                  : "Type live as you speak (press Space to send words)..."
+              }
+              disabled={isStreaming}
+              className="w-full h-11 px-4 rounded-xl border border-hairline bg-card text-ink placeholder:text-mutedInk/60 text-sm focus:outline-none focus:ring-2 focus:ring-terracotta"
+            />
+          </div>
 
           <VoiceButton
             isListening={isListening}
@@ -236,10 +395,11 @@ export function ChatPanel({
 
           <button
             type="submit"
-            disabled={!inputText.trim() || isStreaming}
+            disabled={!inputText.trim() && words.length === 0}
             className="h-11 px-5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-paper font-medium text-sm transition-all flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-xs"
+            title="Finish and lock in product"
           >
-            <span>Send</span>
+            <span>{inputText.trim() ? "Send" : "Finish"}</span>
             <Send size={14} />
           </button>
         </form>

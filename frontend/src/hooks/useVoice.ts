@@ -1,5 +1,5 @@
 // useVoice — Web Speech API for voice input
-// Streams recognized words to the agent via sendWord callback
+// Streams recognized words in real time to the agent via onWord callback
 
 import { useState, useCallback, useRef, useEffect } from "react";
 
@@ -51,58 +51,89 @@ export function useVoice(onWord: (word: string) => void, onDone: () => void) {
   const [isSupported, setIsSupported] = useState(false);
   const [interim, setInterim] = useState("");
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const processedRef = useRef<Set<string>>(new Set());
+  const sentIndexRef = useRef<number>(0);
+  const currentTokensRef = useRef<string[]>([]);
+  const isStoppingRef = useRef<boolean>(false);
 
   useEffect(() => {
-    const SR =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     setIsSupported(!!SR);
   }, []);
 
+  const flushRemainingWords = useCallback(() => {
+    const tokens = currentTokensRef.current;
+    while (sentIndexRef.current < tokens.length) {
+      const w = tokens[sentIndexRef.current];
+      if (w) onWord(w);
+      sentIndexRef.current++;
+    }
+    setInterim("");
+  }, [onWord]);
+
   const start = useCallback(() => {
-    const SR =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
+
+    try {
+      recognitionRef.current?.abort();
+    } catch {}
 
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = "en-IN"; // English + Hindi mixed
+    recognition.lang = "en-IN"; // English + Hindi / Hinglish mixed
 
-    processedRef.current = new Set();
+    sentIndexRef.current = 0;
+    currentTokensRef.current = [];
+    isStoppingRef.current = false;
+    setInterim("");
 
     recognition.onstart = () => {
       setIsListening(true);
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interimTranscript = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        const transcript = result[0].transcript.trim();
+      let finalizedText = "";
+      let interimText = "";
 
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i];
         if (result.isFinal) {
-          // Send each word that hasn't been sent yet
-          const words = transcript.split(/\s+/).filter(Boolean);
-          for (const word of words) {
-            const key = `${i}-${word}`;
-            if (!processedRef.current.has(key)) {
-              processedRef.current.add(key);
-              onWord(word);
-            }
-          }
-          setInterim("");
+          finalizedText += result[0].transcript + " ";
         } else {
-          interimTranscript += transcript + " ";
+          interimText += result[0].transcript + " ";
         }
       }
-      if (interimTranscript) {
-        setInterim(interimTranscript.trim());
+
+      const allTokens = (finalizedText + " " + interimText)
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+      const finalTokens = finalizedText.trim().split(/\s+/).filter(Boolean);
+
+      currentTokensRef.current = allTokens;
+
+      // Safe count: All finalized tokens + any token that is followed by a subsequent word
+      const safeCount = Math.max(
+        finalTokens.length,
+        allTokens.length > 1 ? allTokens.length - 1 : 0
+      );
+
+      while (sentIndexRef.current < safeCount) {
+        const word = allTokens[sentIndexRef.current];
+        if (word) {
+          onWord(word);
+        }
+        sentIndexRef.current++;
       }
+
+      // Remaining uncommitted tokens are shown as live interim text
+      const remaining = allTokens.slice(sentIndexRef.current).join(" ");
+      setInterim(remaining);
     };
 
     recognition.onerror = (event: Event & { error: string }) => {
-      console.error("Speech recognition error:", event.error);
+      console.warn("Speech recognition notice:", event.error);
       if (event.error !== "no-speech") {
         setIsListening(false);
       }
@@ -110,17 +141,28 @@ export function useVoice(onWord: (word: string) => void, onDone: () => void) {
 
     recognition.onend = () => {
       setIsListening(false);
+      flushRemainingWords();
       onDone();
     };
 
     recognitionRef.current = recognition;
-    recognition.start();
-  }, [onWord, onDone]);
+    try {
+      recognition.start();
+    } catch (e) {
+      console.error("Failed to start speech recognition:", e);
+      setIsListening(false);
+    }
+  }, [onWord, onDone, flushRemainingWords]);
 
   const stop = useCallback(() => {
-    recognitionRef.current?.stop();
+    isStoppingRef.current = true;
+    try {
+      recognitionRef.current?.stop();
+    } catch {}
     setIsListening(false);
-  }, []);
+    flushRemainingWords();
+    onDone();
+  }, [flushRemainingWords, onDone]);
 
   const toggle = useCallback(() => {
     if (isListening) {
