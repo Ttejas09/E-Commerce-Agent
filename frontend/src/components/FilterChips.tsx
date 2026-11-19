@@ -1,26 +1,21 @@
-// FilterChips — shows extracted filter slots as animated chips
+// FilterChips — animated, color-coded chips with version badge and update pulse
+import { useEffect, useRef, useState } from "react";
 import type { FilterState, FilterValue } from "../types/api";
 
 interface FilterChipsProps {
   filters: FilterState;
 }
 
-const SLOT_LABELS: Record<string, string> = {
-  category: "Category",
-  colour: "Colour",
-  size: "Size",
-  brand: "Brand",
-  max_price: "Max Price",
-  min_price: "Min Price",
-};
-
-const SLOT_ICONS: Record<string, string> = {
-  category: "🏷️",
-  colour: "🎨",
-  size: "📐",
-  brand: "✨",
-  max_price: "💰",
-  min_price: "💸",
+const SLOT_META: Record<
+  string,
+  { label: string; icon: string; color: string }
+> = {
+  category: { label: "Category", icon: "🏷️", color: "#8b5cf6" },
+  brand: { label: "Brand", icon: "✨", color: "#6366f1" },
+  colour: { label: "Colour", icon: "🎨", color: "#3b82f6" },
+  size: { label: "Size", icon: "📐", color: "#10b981" },
+  max_price: { label: "Max Budget", icon: "💰", color: "#f59e0b" },
+  min_price: { label: "Min Budget", icon: "💸", color: "#ec4899" },
 };
 
 function formatValue(key: string, fv: FilterValue): string {
@@ -31,52 +26,127 @@ function formatValue(key: string, fv: FilterValue): string {
 }
 
 export function FilterChips({ filters }: FilterChipsProps) {
-  const slots = (
-    ["category", "colour", "size", "brand", "max_price", "min_price"] as const
+  const [pulseSlots, setPulseSlots] = useState<Set<string>>(new Set());
+  const prevFiltersRef = useRef<FilterState>(filters);
+
+  // Detect which slot changed to trigger subtle flash animation
+  useEffect(() => {
+    const prev = prevFiltersRef.current;
+    const changed = new Set<string>();
+
+    for (const key of [
+      "category",
+      "colour",
+      "size",
+      "brand",
+      "max_price",
+      "min_price",
+    ] as const) {
+      const prevVal = prev[key]?.value;
+      const currVal = filters[key]?.value;
+      if (currVal !== undefined && currVal !== prevVal) {
+        changed.add(key);
+      }
+    }
+
+    if (changed.size > 0) {
+      setPulseSlots(changed);
+      const timer = setTimeout(() => setPulseSlots(new Set()), 1200);
+      return () => clearTimeout(timer);
+    }
+    prevFiltersRef.current = filters;
+  }, [filters]);
+
+  const activeSlots = (
+    ["category", "brand", "colour", "size", "max_price", "min_price"] as const
   ).filter((k) => filters[k] !== null);
 
-  if (slots.length === 0 && filters.residual_tokens.length === 0) {
-    return (
-      <div className="filter-chips filter-chips--empty">
-        <span className="filter-chips__placeholder">
-          Waiting for filters...
-        </span>
-      </div>
-    );
-  }
+  const hasResidual = filters.residual_tokens.length > 0;
 
   return (
-    <div className="filter-chips">
-      {slots.map((key) => {
-        const fv = filters[key] as FilterValue;
-        return (
-          <div
-            key={key}
-            className="filter-chip"
-            style={{
-              opacity: fv.confidence,
-              animationDelay: `${fv.word_index * 40}ms`,
-            }}
-            title={`Confidence: ${(fv.confidence * 100).toFixed(0)}% | Word #${fv.word_index}\nSource: ${fv.provenance.join(", ")}`}
+    <div className="filter-panel">
+      <div className="filter-panel__header">
+        <div className="filter-panel__title-row">
+          <span className="filter-panel__title">EXTRACTED FILTERS</span>
+          <span
+            className={`version-badge ${filters.version > 0 ? "version-badge--updated" : ""}`}
+            title={`Filter State Version: ${filters.version}`}
           >
-            <span className="filter-chip__icon">{SLOT_ICONS[key]}</span>
-            <span className="filter-chip__label">{SLOT_LABELS[key]}</span>
-            <span className="filter-chip__value">{formatValue(key, fv)}</span>
-            <span className="filter-chip__confidence">
-              {(fv.confidence * 100).toFixed(0)}%
-            </span>
-          </div>
-        );
-      })}
-      {filters.residual_tokens.length > 0 && (
-        <div className="filter-chip filter-chip--residual" title="Residual query tokens for search disambiguation">
-          <span className="filter-chip__icon">🔍</span>
-          <span className="filter-chip__label">Query</span>
-          <span className="filter-chip__value">
-            {filters.residual_tokens.join(" ")}
+            V{filters.version}
           </span>
         </div>
-      )}
+        <span className="filter-panel__count">
+          {activeSlots.length} {activeSlots.length === 1 ? "slot" : "slots"} set
+        </span>
+      </div>
+
+      <div className="filter-chips-grid">
+        {activeSlots.length === 0 && !hasResidual ? (
+          <div className="filter-chips-empty">
+            <span className="empty-dash">—</span>
+            <span>No attributes extracted yet</span>
+          </div>
+        ) : (
+          <>
+            {activeSlots.map((key) => {
+              const fv = filters[key] as FilterValue;
+              const meta = SLOT_META[key];
+              const isPulsing = pulseSlots.has(key);
+              const provenanceStr = fv.provenance.join(" ");
+              const hasTransformation =
+                provenanceStr &&
+                provenanceStr.toLowerCase() !== String(fv.value).toLowerCase();
+
+              return (
+                <div
+                  key={key}
+                  className={`filter-chip ${isPulsing ? "filter-chip--pulsing" : ""}`}
+                  style={{
+                    borderColor: `${meta.color}40`,
+                    background: `linear-gradient(135deg, rgba(17, 19, 24, 0.9), ${meta.color}10)`,
+                  }}
+                  title={`Slot: ${meta.label}\nValue: ${fv.value}\nConfidence: ${(fv.confidence * 100).toFixed(0)}%\nSource text: "${provenanceStr}"`}
+                >
+                  <span className="filter-chip__icon">{meta.icon}</span>
+                  <div className="filter-chip__content">
+                    <span className="filter-chip__label" style={{ color: meta.color }}>
+                      {meta.label}
+                    </span>
+                    <div className="filter-chip__value-row">
+                      <span className="filter-chip__value">
+                        {formatValue(key, fv)}
+                      </span>
+                      {hasTransformation && (
+                        <span className="filter-chip__provenance" title="Source phrase">
+                          ← {provenanceStr}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="filter-chip__conf">
+                    {(fv.confidence * 100).toFixed(0)}%
+                  </span>
+                </div>
+              );
+            })}
+
+            {hasResidual && (
+              <div
+                className="filter-chip filter-chip--residual"
+                title="Non-slot descriptive keywords forwarded to query ranking"
+              >
+                <span className="filter-chip__icon">🔍</span>
+                <div className="filter-chip__content">
+                  <span className="filter-chip__label">Query Keywords</span>
+                  <span className="filter-chip__value">
+                    {filters.residual_tokens.join(" ")}
+                  </span>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
