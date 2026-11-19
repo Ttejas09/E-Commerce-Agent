@@ -234,6 +234,43 @@ export function useAgent(useMock = false) {
               timestamp,
             });
 
+            // Check for superseded slot words (corrections)
+            const newlySuperseded: string[] = [];
+            const slotKeys = [
+              "category",
+              "colour",
+              "size",
+              "brand",
+              "max_price",
+              "min_price",
+            ] as const;
+
+            for (const key of slotKeys) {
+              const prevVal = s.filters[key];
+              const nextVal = response.filters[key];
+              if (
+                prevVal &&
+                nextVal &&
+                String(prevVal.value).toLowerCase() !==
+                  String(nextVal.value).toLowerCase()
+              ) {
+                newlySuperseded.push(...prevVal.provenance);
+                events.push({
+                  id: `correction-${newIndex}-${key}`,
+                  word_index: newIndex,
+                  word,
+                  type: "correction",
+                  description: `Correction in ${key}: "${prevVal.value}" → "${nextVal.value}"`,
+                  confidence: response.confidence,
+                  timestamp,
+                });
+              }
+            }
+
+            const updatedSuperseded = Array.from(
+              new Set([...s.superseded_words, ...newlySuperseded]),
+            );
+
             setState((prev) => ({
               ...prev,
               words: newWords,
@@ -245,6 +282,8 @@ export function useAgent(useMock = false) {
               top_candidates: response.top_candidates,
               reason: response.reason,
               timeline: [...prev.timeline, ...events],
+              superseded_words: updatedSuperseded,
+              is_searching: false,
               ...(newCommit
                 ? {
                     phase: "committed" as const,
@@ -368,6 +407,10 @@ export function useAgent(useMock = false) {
     [sendWord, finishSession],
   );
 
+  const clearError = useCallback(() => {
+    setState((s) => ({ ...s, error: null }));
+  }, []);
+
   return {
     state,
     startSession,
@@ -377,5 +420,6 @@ export function useAgent(useMock = false) {
     reset,
     setTransport,
     setExpectedTarget,
+    clearError,
   };
 }

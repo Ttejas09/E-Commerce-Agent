@@ -141,6 +141,8 @@ export interface AgentState {
   error: string | null;
   timeline: TimelineEvent[];
   scoring: SessionScore | null;
+  superseded_words: string[];
+  is_searching: boolean;
 }
 
 export const EMPTY_FILTER_STATE: FilterState = {
@@ -172,4 +174,6 @@ export const INITIAL_AGENT_STATE: AgentState = {
   error: null,
   timeline: [],
   scoring: null,
+  superseded_words: [],
+  is_searching: false,
 };
