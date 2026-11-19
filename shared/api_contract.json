@@ -1,0 +1,108 @@
+{
+  "version": "2.1",
+  "base_url": "http://localhost:8000",
+  "json_casing": "snake_case",
+  "endpoints": {
+    "health": {
+      "method": "GET",
+      "path": "/health",
+      "response": { "status": "string" }
+    },
+    "agent_start": {
+      "method": "POST",
+      "path": "/agent/start",
+      "request": {
+        "request_id": "string"
+      },
+      "response": {
+        "status": "string",
+        "request_id": "string"
+      }
+    },
+    "agent_observe": {
+      "method": "POST",
+      "path": "/agent/observe",
+      "request": {
+        "request_id": "string",
+        "word": "string",
+        "word_index": "integer (>= 1)",
+        "is_final": "boolean (default false)"
+      },
+      "response": {
+        "commit": "string | null",
+        "committed_product": "ProductSummary | null",
+        "top_candidates": "ProductSummary[]",
+        "filters": "FilterState",
+        "confidence": "float [0, 1]",
+        "searches_used": "integer",
+        "searches_remaining": "integer",
+        "reason": "string"
+      }
+    },
+    "agent_finish": {
+      "method": "POST",
+      "path": "/agent/finish",
+      "request": {
+        "request_id": "string"
+      },
+      "response": {
+        "product_id": "string | null",
+        "product": "ProductSummary | null",
+        "filters": "FilterState",
+        "confidence": "float [0, 1]",
+        "searches_used": "integer"
+      }
+    },
+    "get_product": {
+      "method": "GET",
+      "path": "/products/{product_id}",
+      "response": "ProductSummary"
+    },
+    "agent_stream_ws": {
+      "method": "WS",
+      "path": "/agent/stream",
+      "frames_in": [
+        { "type": "start", "payload": "StartRequest" },
+        { "type": "observe", "payload": "ObserveRequest" },
+        { "type": "finish", "payload": "FinishRequest" }
+      ],
+      "frames_out": [
+        { "type": "start_ack", "payload": "StartResponse" },
+        { "type": "observe", "payload": "ObserveResponse" },
+        { "type": "finish", "payload": "FinishResponse" },
+        { "type": "error", "payload": "ErrorResponse" }
+      ]
+    }
+  },
+  "schemas": {
+    "FilterValue": {
+      "value": "string | integer",
+      "confidence": "float [0, 1]",
+      "word_index": "integer",
+      "provenance": "string[]"
+    },
+    "FilterState": {
+      "category": "FilterValue | null",
+      "colour": "FilterValue | null",
+      "size": "FilterValue | null",
+      "brand": "FilterValue | null",
+      "max_price": "FilterValue | null",
+      "min_price": "FilterValue | null",
+      "residual_tokens": "string[]",
+      "version": "integer"
+    },
+    "ProductSummary": {
+      "product_id": "string",
+      "title": "string",
+      "brand": "string",
+      "category": "string",
+      "colour": "string",
+      "size": "string",
+      "price": "integer"
+    },
+    "ErrorResponse": {
+      "error_code": "string",
+      "detail": "string"
+    }
+  }
+}
