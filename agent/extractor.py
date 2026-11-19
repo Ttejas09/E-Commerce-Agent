@@ -1,9 +1,13 @@
-"""Streaming Incremental Extractor for anticipatory e-commerce shopping queries."""
+"""Streaming Incremental Extractor with safe fuzzy matching, expanded synonyms,
+catalogue grounding (category-brand & category-size mutual inference),
+and generalized structural closure detection.
+"""
 
 import sys
 from pathlib import Path
+import re
+from typing import Optional, List, Dict, Tuple, Set, Any
 
-# Ensure paths
 _AGENT_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _AGENT_DIR.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -13,19 +17,44 @@ if str(_AGENT_DIR) not in sys.path:
 
 try:
     from agent.catalogue_index import (
-        CATEGORIES, BRANDS_LOWER, COLOURS, ALL_SIZES, CATEGORY_SIZES
+        CATEGORIES, BRANDS, BRANDS_LOWER, COLOURS, ALL_SIZES, CATEGORY_SIZES,
+        BRAND_CATEGORIES
     )
     from agent.filters import FilterState, FilterValue
-    from agent.config import CORRECTION_COOLDOWN
+    from agent.config import CORRECTION_COOLDOWN, FUZZY_MIN_LEN
 except (ImportError, ModuleNotFoundError):
     from catalogue_index import (
-        CATEGORIES, BRANDS_LOWER, COLOURS, ALL_SIZES, CATEGORY_SIZES
+        CATEGORIES, BRANDS, BRANDS_LOWER, COLOURS, ALL_SIZES, CATEGORY_SIZES,
+        BRAND_CATEGORIES
     )
     from filters import FilterState, FilterValue
-    from config import CORRECTION_COOLDOWN
+    from config import CORRECTION_COOLDOWN, FUZZY_MIN_LEN
 
-import re
-from typing import Optional, List, Dict, Tuple, Set
+
+def levenshtein_1(s1: str, s2: str) -> bool:
+    """Returns True if edit distance between s1 and s2 is <= 1."""
+    if s1 == s2:
+        return True
+    l1, l2 = len(s1), len(s2)
+    if abs(l1 - l2) > 1:
+        return False
+    if l1 == l2:
+        return sum(1 for a, b in zip(s1, s2) if a != b) <= 1
+    if l1 > l2:
+        s1, s2 = s2, s1
+        l1, l2 = l2, l1
+    i = j = diffs = 0
+    while i < l1 and j < l2:
+        if s1[i] == s2[j]:
+            i += 1
+            j += 1
+        else:
+            diffs += 1
+            if diffs > 1:
+                return False
+            j += 1
+    return True
+
 
 # Number maps
 ENGLISH_NUMBERS = {
@@ -54,6 +83,8 @@ MULTI_WORD_CATEGORIES = [
     (['running', 'shoes'], 'running shoes'),
     (['running', 'sneakers'], 'running shoes'),
     (['jogging', 'shoes'], 'running shoes'),
+    (['sport', 'shoes'], 'running shoes'),
+    (['sports', 'shoes'], 'running shoes'),
     (['casual', 'sneakers'], 'sneakers'),
     (['track', 'pants'], 'track pants'),
     (['track', 'pant'], 'track pants'),
@@ -67,12 +98,12 @@ MULTI_WORD_CATEGORIES = [
 ]
 
 SINGLE_WORD_CATEGORIES = {
-    'sneakers': 'sneakers', 'sneaker': 'sneakers',
-    'sandals': 'sandals', 'sandal': 'sandals', 'slides': 'sandals', 'floaters': 'sandals', 'chappal': 'sandals',
-    'hoodies': 'hoodies', 'hoodie': 'hoodies', 'sweatshirt': 'hoodies',
+    'sneakers': 'sneakers', 'sneaker': 'sneakers', 'kicks': 'sneakers', 'trainers': 'sneakers', 'trainer': 'sneakers', 'loafers': 'sneakers',
+    'sandals': 'sandals', 'sandal': 'sandals', 'slides': 'sandals', 'floaters': 'sandals', 'chappal': 'sandals', 'chappals': 'sandals', 'slippers': 'sandals',
+    'hoodies': 'hoodies', 'hoodie': 'hoodies', 'hoody': 'hoodies', 'sweatshirt': 'hoodies', 'sweatshirts': 'hoodies',
     'jackets': 'jackets', 'jacket': 'jackets',
     'jeans': 'jeans', 'jean': 'jeans', 'denims': 'jeans', 'denim': 'jeans',
-    'kurtas': 'kurtas', 'kurta': 'kurtas', 'kurti': 'kurtas',
+    'kurtas': 'kurtas', 'kurta': 'kurtas', 'kurti': 'kurtas', 'kurties': 'kurtas',
     'dresses': 'dresses', 'dress': 'dresses',
     'caps': 'caps', 'cap': 'caps',
     'backpacks': 'backpacks', 'backpack': 'backpacks', 'rucksack': 'backpacks', 'baig': 'backpacks', 'bag': 'backpacks',
@@ -80,10 +111,21 @@ SINGLE_WORD_CATEGORIES = {
     'watches': 'watches', 'watch': 'watches', 'wristwatch': 'watches', 'ghadi': 'watches',
     'headphones': 'headphones', 'headphone': 'headphones', 'headset': 'headphones',
     'shirts': 'shirts', 'shirt': 'shirts',
-    'trackpants': 'track pants', 'joggers': 'track pants', 'lower': 'track pants',
-    'tshirt': 't-shirts', 'tshirts': 't-shirts', 'tee': 't-shirts', 'tees': 't-shirts',
-    't-shirt': 't-shirts', 't-shirts': 't-shirts',
+    'trackpants': 'track pants', 'joggers': 'track pants', 'lower': 'track pants', 'trousers': 'track pants', 'trouser': 'track pants', 'pajama': 'track pants', 'pajamas': 'track pants',
+    'tshirt': 't-shirts', 'tshirts': 't-shirts', 'tee': 't-shirts', 'tees': 't-shirts', 't-shirt': 't-shirts', 't-shirts': 't-shirts', 'polo': 't-shirts', 'polos': 't-shirts', 'top': 't-shirts',
     'runners': 'running shoes',
+    'joota': 'sneakers', 'joote': 'sneakers', 'juta': 'sneakers', 'jute': 'sneakers',
+}
+
+# Single-category brand guarantees:
+BRAND_EXCLUSIVE_CATEGORY = {
+    'audora': 'headphones',
+    'horavo': 'watches',
+    'tikkra': 'watches',
+    'sonquil': 'headphones',
+    'packwise': 'backpacks',
+    'kesar loom': 'kurtas',
+    'ledgerly': 'wallets',
 }
 
 MULTI_WORD_BRANDS = [
@@ -93,11 +135,28 @@ MULTI_WORD_BRANDS = [
 COMPOUND_COLOURS = [
     (['navy', 'blue'], 'navy'),
     (['olive', 'green'], 'olive'),
+    (['dark', 'blue'], 'navy'),
+    (['deep', 'blue'], 'navy'),
+    (['sky', 'blue'], 'blue'),
+    (['light', 'blue'], 'blue'),
+    (['dark', 'grey'], 'grey'),
+    (['dark', 'gray'], 'grey'),
+    (['light', 'grey'], 'grey'),
+    (['light', 'gray'], 'grey'),
+    (['off', 'white'], 'white'),
 ]
 
 COLOUR_MAP = {
     'gray': 'grey',
+    'charcoal': 'grey',
     'golden': 'gold',
+    'cream': 'beige',
+    'ivory': 'white',
+    'burgundy': 'maroon',
+    'crimson': 'red',
+    'scarlet': 'red',
+    'mustard': 'yellow',
+    'khaki': 'tan',
     'kaala': 'black', 'kala': 'black',
     'safed': 'white',
     'neela': 'blue', 'nila': 'blue',
@@ -118,30 +177,24 @@ SIZE_WORDS = {
     'xxs': 'XXS',
 }
 
-CLOSURE_WORDS = {
-    'wedding', 'office', 'week', 'dad', 'gym', 'brother', 'gift',
-    'flashy', 'thanks', 'thank', 'please', 'chahiye', 'milega', 'dikhao'
+UNIVERSAL_CLOSURE_WORDS = {
+    'please', 'thanks', 'thank', 'chahiye', 'milega', 'dikhao', 'dikhaiye', 'batao', 'help'
 }
 
 CLOSURE_PHRASES = [
     ['have', 'it'],
     ['hai', 'kya'],
     ['this', 'week'],
-    ['my', 'dad'],
-    ['the', 'gym'],
-    ['my', 'brother'],
-    ['a', 'gift'],
     ['too', 'flashy'],
     ['thank', 'you'],
-    ['a', 'wedding'],
-    ['for', 'office'],
-    ['for', 'a'],
-    ['for', 'my'],
-    ['for', 'the'],
     ['if', 'you'],
     ['need', 'it'],
+    ['want', 'it'],
     ['nothing', 'too'],
     ['as', 'a'],
+    ['for', 'a'],
+    ['for', 'the'],
+    ['for', 'my'],
 ]
 
 CORRECTION_SIGNALS = {
@@ -157,8 +210,8 @@ STOPWORDS = {
     'thank', 'chahiye', 'milega', 'mil', 'jayega', 'kya', 'aapke', 'paas', 'mujhe',
     'mera', 'mere', 'liye', 'hai', 'ho', 'dikhao', 'dikhaiye', 'batao', 'wala', 'wali',
     'mein', 'me', 'ka', 'ki', 'ke', 'ek', 'bhaiya', 'na', 'aur', 'haan', 'baat',
-    'as', 'gift', 'office', 'wedding', 'gym', 'brother', 'dad', 'week', 'day', 'days',
-    'uh', 'hmm', 'has', 'be', 'from', 'by', 'brand', 'only', 'more', 'than', 'rupees', 'rs'
+    'uh', 'hmm', 'has', 'be', 'from', 'by', 'brand', 'only', 'more', 'than', 'rupees', 'rs',
+    'inr', 'bucks', 'approx', 'around', 'about', 'as', 'badhiya', 'sa'
 }
 
 
@@ -177,6 +230,7 @@ def parse_price_phrase(tokens: List[str], i: int) -> Optional[Tuple[int, int]]:
     if i >= n:
         return None
 
+    # Hindi fractions
     if tokens[i] in ('saadhe', 'saade') and i + 2 < n:
         next_tok = tokens[i+1]
         digit = ENGLISH_NUMBERS.get(next_tok) or HINDI_NUMBERS.get(next_tok)
@@ -196,6 +250,7 @@ def parse_price_phrase(tokens: List[str], i: int) -> Optional[Tuple[int, int]]:
     if tokens[i] in ('satrah', 'satra') and i + 1 < n and tokens[i+1] in ('sau', 'so', 'hundred'):
         return (1700, i + 2)
 
+    # Tens + Ones hundred
     if tokens[i] in ('twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'):
         tens = ENGLISH_NUMBERS[tokens[i]]
         if i + 2 < n and tokens[i+1] in ENGLISH_NUMBERS and tokens[i+2] in ('hundred', 'sau', 'so'):
@@ -204,11 +259,13 @@ def parse_price_phrase(tokens: List[str], i: int) -> Optional[Tuple[int, int]]:
         if i + 1 < n and tokens[i+1] in ('hundred', 'sau', 'so'):
             return (tens * 100, i + 2)
 
+    # Teens hundred
     if tokens[i] in ('eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'):
         teens = ENGLISH_NUMBERS[tokens[i]]
         if i + 1 < n and tokens[i+1] in ('hundred', 'sau', 'so'):
             return (teens * 100, i + 2)
 
+    # Num thousand num hundred
     num1 = ENGLISH_NUMBERS.get(tokens[i]) or HINDI_NUMBERS.get(tokens[i])
     if num1 is not None and i + 1 < n and tokens[i+1] in ('thousand', 'hazaar', 'hazar'):
         val = num1 * 1000
@@ -218,9 +275,11 @@ def parse_price_phrase(tokens: List[str], i: int) -> Optional[Tuple[int, int]]:
                 return (val + num2 * 100, i + 4)
         return (val, i + 2)
 
+    # Num hundred
     if num1 is not None and i + 1 < n and tokens[i+1] in ('hundred', 'sau', 'so'):
         return (num1 * 100, i + 2)
 
+    # Digits and suffixes: '4k', '0.8k', '₹1500', '1,500'
     tok = tokens[i].replace(',', '')
     if tok.startswith('₹'):
         tok = tok[1:]
@@ -240,7 +299,7 @@ def parse_price_phrase(tokens: List[str], i: int) -> Optional[Tuple[int, int]]:
 
 
 class IncrementalExtractor:
-    """Maintains token sequence and incrementally extracts FilterState."""
+    """Maintains token sequence and incrementally extracts FilterState with safe fuzzy matching."""
 
     def __init__(self, catalogue_index=None):
         self.cat_idx = catalogue_index
@@ -281,6 +340,7 @@ class IncrementalExtractor:
         while i < n:
             tok = tokens[i]
 
+            # 1. Multi-word brand: 'kesar loom'
             matched_brand = None
             for phrase, brand_name in MULTI_WORD_BRANDS:
                 plen = len(phrase)
@@ -292,27 +352,65 @@ class IncrementalExtractor:
             if matched_brand:
                 continue
 
+            # 2. Single-word brand (exact match)
             if tok in BRANDS_LOWER:
                 slots_found['brand'] = (BRANDS_LOWER[tok], i + 1, "brand")
                 i += 1
                 continue
 
+            # 3. Safe fuzzy match for brand (only if len >= FUZZY_MIN_LEN)
+            if len(tok) >= FUZZY_MIN_LEN:
+                matched_fuzzy_brand = None
+                for b_low, b_orig in BRANDS_LOWER.items():
+                    if len(b_low) >= FUZZY_MIN_LEN and levenshtein_1(tok, b_low):
+                        matched_fuzzy_brand = b_orig
+                        break
+                if matched_fuzzy_brand:
+                    slots_found['brand'] = (matched_fuzzy_brand, i + 1, "brand_fuzzy")
+                    i += 1
+                    continue
+
+            # 4. Multi-word categories (with fuzzy token matching)
             matched_cat = None
             for phrase, cat_name in MULTI_WORD_CATEGORIES:
                 plen = len(phrase)
-                if tokens[i:i+plen] == phrase:
-                    matched_cat = cat_name
-                    slots_found['category'] = (matched_cat, i + 1, "multi_cat")
-                    i += plen
-                    break
+                if i + plen <= n:
+                    window = tokens[i:i+plen]
+                    # Check exact or 1 fuzzy token match in phrase
+                    match = True
+                    for p_word, w_word in zip(phrase, window):
+                        if p_word != w_word:
+                            if len(w_word) >= FUZZY_MIN_LEN and levenshtein_1(p_word, w_word):
+                                continue
+                            match = False
+                            break
+                    if match:
+                        matched_cat = cat_name
+                        slots_found['category'] = (matched_cat, i + 1, "multi_cat")
+                        i += plen
+                        break
             if matched_cat:
                 continue
 
+            # 5. Single-word categories (exact + synonyms)
             if tok in SINGLE_WORD_CATEGORIES:
                 slots_found['category'] = (SINGLE_WORD_CATEGORIES[tok], i + 1, "cat")
                 i += 1
                 continue
 
+            # 6. Safe fuzzy match for categories (only if len >= FUZZY_MIN_LEN)
+            if len(tok) >= FUZZY_MIN_LEN:
+                matched_fuzzy_cat = None
+                for c_syn, c_canon in SINGLE_WORD_CATEGORIES.items():
+                    if len(c_syn) >= FUZZY_MIN_LEN and levenshtein_1(tok, c_syn):
+                        matched_fuzzy_cat = c_canon
+                        break
+                if matched_fuzzy_cat:
+                    slots_found['category'] = (matched_fuzzy_cat, i + 1, "cat_fuzzy")
+                    i += 1
+                    continue
+
+            # 7. Compound colours
             matched_col = None
             for phrase, col_name in COMPOUND_COLOURS:
                 plen = len(phrase)
@@ -324,6 +422,7 @@ class IncrementalExtractor:
             if matched_col:
                 continue
 
+            # 8. Single-word colours
             if tok in COLOURS:
                 slots_found['colour'] = (tok, i + 1, "colour")
                 i += 1
@@ -333,6 +432,7 @@ class IncrementalExtractor:
                 i += 1
                 continue
 
+            # 9. Price phrases
             p_res = parse_price_phrase(tokens, i)
             if p_res:
                 val, end_idx = p_res
@@ -340,6 +440,7 @@ class IncrementalExtractor:
                 i = end_idx
                 continue
 
+            # 10. Size phrases
             if tokens[i:i+2] == ['extra', 'large']:
                 slots_found['size'] = ('XL', i + 1, "size_phrase")
                 i += 2
@@ -402,6 +503,21 @@ class IncrementalExtractor:
 
             i += 1
 
+        # 11. Catalogue Grounding (Mutual Inference):
+        # A. If size is a waist size (28..36), the catalogue category can ONLY be 'jeans'
+        if 'size' in slots_found and 'category' not in slots_found:
+            s_val = slots_found['size'][0]
+            if s_val in ('28', '30', '32', '34', '36'):
+                slots_found['category'] = ('jeans', slots_found['size'][1], "inferred_from_waist")
+
+        # B. If brand makes exclusively ONE category, infer category if missing
+        if 'brand' in slots_found and 'category' not in slots_found:
+            b_low = str(slots_found['brand'][0]).lower()
+            if b_low in BRAND_EXCLUSIVE_CATEGORY:
+                inferred_cat = BRAND_EXCLUSIVE_CATEGORY[b_low]
+                slots_found['category'] = (inferred_cat, slots_found['brand'][1], "inferred_from_brand")
+
+        # Update FilterState
         for slot in ('category', 'colour', 'brand', 'size', 'max_price'):
             if slot in slots_found:
                 val, w_idx, prov = slots_found[slot]
@@ -422,18 +538,35 @@ class IncrementalExtractor:
         self.words_since_last_slot_change += 1
 
     def has_closure_cue(self) -> bool:
-        """Check if recent tokens match any closure word or anticipatory phrase."""
+        """Check if recent tokens or structural signals indicate query completion."""
         tokens = self.tokens
         if not tokens:
             return False
 
-        if tokens[-1] in CLOSURE_WORDS or (len(tokens) >= 2 and tokens[-2] in CLOSURE_WORDS):
+        # 1. Universal politeness / closure words
+        if tokens[-1] in UNIVERSAL_CLOSURE_WORDS or (len(tokens) >= 2 and tokens[-2] in UNIVERSAL_CLOSURE_WORDS):
             return True
 
+        # 2. Structural closing phrases (e.g. 'for a', 'as a', 'this week', 'have it')
         for cp in CLOSURE_PHRASES:
             cplen = len(cp)
             if len(tokens) >= cplen and tokens[-cplen:] == cp:
                 return True
+
+        # 3. General purpose clause: 'for [a/the/my]? [noun]' or 'as [a/the/my]? [noun]'
+        # e.g. 'for college', 'for diwali', 'as a present', 'for my sister'
+        if len(tokens) >= 2:
+            prep_idx = None
+            if tokens[-2] in ('for', 'as'):
+                prep_idx = -2
+            elif len(tokens) >= 3 and tokens[-3] in ('for', 'as') and tokens[-2] in ('a', 'an', 'the', 'my'):
+                prep_idx = -3
+
+            if prep_idx is not None:
+                last_tok = tokens[-1]
+                if last_tok not in ('under', 'below', 'less', 'max', 'budget', 'above', 'over', 'within', 'upto'):
+                    if last_tok not in SINGLE_WORD_CATEGORIES and last_tok not in COLOURS and last_tok not in ALL_SIZES:
+                        return True
 
         return False
 
@@ -453,7 +586,7 @@ class IncrementalExtractor:
         }
         res_tokens = [
             t for t in tokens
-            if t not in STOPWORDS and t not in filter_vals and t not in CLOSURE_WORDS
+            if t not in STOPWORDS and t not in filter_vals and t not in UNIVERSAL_CLOSURE_WORDS
         ]
         self.state.residual_tokens = res_tokens
         return " ".join(res_tokens)

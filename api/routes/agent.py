@@ -1,6 +1,7 @@
-"""Stateful FastAPI routes wiring the real Anticipatory Commerce Agent."""
+"""Stateful FastAPI routes wiring the real Anticipatory Commerce Agent with WebSocket streaming support."""
 
 import sys
+import json
 from pathlib import Path
 from typing import Dict, Optional, List
 
@@ -9,7 +10,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from api.schemas import (
     StartRequest, StartResponse,
@@ -111,7 +112,6 @@ async def observe(req: ObserveRequest):
         )
 
     async with session.lock:
-        # Enforce sequential word ordering
         if req.word_index != session.last_word_index + 1:
             raise HTTPException(
                 status_code=409,
@@ -129,7 +129,6 @@ async def observe(req: ObserveRequest):
         if commit_id and commit_id in _CATALOGUE_PRODUCTS:
             committed_summary = _to_product_summary(_CATALOGUE_PRODUCTS[commit_id])
 
-        # Extract top candidate summaries
         top_candidates = []
         for r in session.agent.search_ctrl.last_results[:3]:
             pid = r.get("product_id")
@@ -182,6 +181,91 @@ async def finish(req: FinishRequest):
         )
 
 
+@router.websocket("/stream")
+async def websocket_stream(websocket: WebSocket):
+    """Low-latency WebSocket endpoint for real-time voice streaming."""
+    await websocket.accept()
+    session_id: Optional[str] = None
+    try:
+        while True:
+            text = await websocket.receive_text()
+            data = json.loads(text)
+            msg_type = data.get("type")
+            payload = data.get("payload", {})
+
+            if msg_type == "start":
+                req_id = payload.get("request_id")
+                tools = Tools()
+                agent = Agent(tools)
+                agent.start(req_id)
+                session = _session_manager.create(request_id=req_id, agent=agent)
+                session_id = req_id
+                await websocket.send_json({
+                    "type": "start_ack",
+                    "payload": StartResponse(request_id=req_id).model_dump()
+                })
+
+            elif msg_type == "observe":
+                req_id = payload.get("request_id")
+                session = _session_manager.get(req_id)
+                if session is None:
+                    await websocket.send_json({
+                        "type": "error",
+                        "payload": {"error_code": "SESSION_NOT_FOUND", "detail": f"Session {req_id} not found"}
+                    })
+                    continue
+
+                word = payload.get("word", "")
+                word_index = payload.get("word_index", session.last_word_index + 1)
+                session.last_word_index = word_index
+
+                out = session.agent.observe(word)
+                commit_id = out.get("commit") if out else None
+                committed_summary = None
+                if commit_id and commit_id in _CATALOGUE_PRODUCTS:
+                    committed_summary = _to_product_summary(_CATALOGUE_PRODUCTS[commit_id]).model_dump()
+
+                top_candidates = []
+                for r in session.agent.search_ctrl.last_results[:3]:
+                    pid = r.get("product_id")
+                    if pid and pid in _CATALOGUE_PRODUCTS:
+                        top_candidates.append(_to_product_summary(_CATALOGUE_PRODUCTS[pid]).model_dump())
+
+                resp = {
+                    "commit": commit_id,
+                    "committed_product": committed_summary,
+                    "top_candidates": top_candidates,
+                    "filters": _to_schema_filters(session.agent.extractor.state).model_dump(),
+                    "confidence": out.get("confidence", 0.5) if out else 0.5,
+                    "searches_used": session.agent.search_ctrl.searches_used,
+                    "searches_remaining": session.agent.search_ctrl.searches_remaining,
+                    "reason": "commit" if commit_id else "observing",
+                }
+                await websocket.send_json({"type": "observe", "payload": resp})
+
+            elif msg_type == "finish":
+                req_id = payload.get("request_id")
+                session = _session_manager.get(req_id)
+                if session:
+                    product_id = session.agent.finish()
+                    session.finished = True
+                    _session_manager.remove(req_id)
+                    product_summary = None
+                    if product_id and product_id in _CATALOGUE_PRODUCTS:
+                        product_summary = _to_product_summary(_CATALOGUE_PRODUCTS[product_id]).model_dump()
+                    resp = {
+                        "product_id": product_id,
+                        "product": product_summary,
+                        "filters": _to_schema_filters(session.agent.extractor.state).model_dump(),
+                        "confidence": 1.0 if product_id else 0.0,
+                        "searches_used": session.agent.search_ctrl.searches_used,
+                    }
+                    await websocket.send_json({"type": "finish", "payload": resp})
+    except WebSocketDisconnect:
+        if session_id:
+            _session_manager.remove(session_id)
+
+
 # --- Product lookup route (mounted directly on root) ---
 _product_router = APIRouter(tags=["products"])
 
@@ -205,5 +289,4 @@ async def get_product(product_id: str):
     return _to_product_summary(p)
 
 
-# Include the product router in router
 router.include_router(_product_router)
